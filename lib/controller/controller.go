@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"Infinidat-k8s-provisioner/lib/leaderelection"
-	rl "Infinidat-k8s-provisioner/lib/leaderelection/resourcelock"
+	"infinidat-k8s-provisioner/lib/leaderelection"
+	rl "infinidat-k8s-provisioner/lib/leaderelection/resourcelock"
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	storage "k8s.io/api/storage/v1"

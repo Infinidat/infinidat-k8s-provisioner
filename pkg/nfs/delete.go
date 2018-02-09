@@ -14,8 +14,8 @@ limitations under the License.*/
 package nfs
 
 import (
-	"Infinidat-k8s-provisioner/lib/commons"
-	"Infinidat-k8s-provisioner/lib/controller"
+	"infinidat-k8s-provisioner/lib/commons"
+	"infinidat-k8s-provisioner/lib/controller"
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"

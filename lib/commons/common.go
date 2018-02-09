@@ -14,7 +14,7 @@ limitations under the License.*/
 package commons
 
 import (
-	"Infinidat-k8s-provisioner/lib/controller"
+	"infinidat-k8s-provisioner/lib/controller"
 	"crypto/tls"
 	"encoding/json"
 	"errors"

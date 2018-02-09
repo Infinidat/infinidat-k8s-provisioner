@@ -14,9 +14,9 @@ limitations under the License.*/
 package iscsi
 
 import (
-	"Infinidat-k8s-provisioner/lib/commons"
-	"Infinidat-k8s-provisioner/lib/controller"
-	"Infinidat-k8s-provisioner/lib/util"
+	"infinidat-k8s-provisioner/lib/commons"
+	"infinidat-k8s-provisioner/lib/controller"
+	"infinidat-k8s-provisioner/lib/util"
 	"encoding/json"
 	"errors"
 	"fmt"

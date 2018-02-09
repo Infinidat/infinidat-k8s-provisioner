@@ -23,8 +23,8 @@ import (
 	"strings"
 	"sync"
 
-	"Infinidat-k8s-provisioner/lib/allocator"
-	"Infinidat-k8s-provisioner/lib/controller"
+	"infinidat-k8s-provisioner/lib/allocator"
+	"infinidat-k8s-provisioner/lib/controller"
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
