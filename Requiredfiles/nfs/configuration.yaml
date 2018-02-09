@@ -1,0 +1,15 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  creationTimestamp: 2016-02-18T19:14:38Z
+  name: provisionerconfig
+  namespace: default
+data: 
+  pool_name: default
+  provision_type: thin
+  nfs_mount_options: hard,rsize=1M,wsize=1M
+  nfs_export_permissions: RW
+  max_fs: "4000"
+  max_volume: "100000"
+  nfs_ssd_enabled: "false"
+  nfs_no_root_squash: "true"

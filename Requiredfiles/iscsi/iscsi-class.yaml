@@ -1,0 +1,32 @@
+kind: StorageClass
+apiVersion: storage.k8s.io/v1beta1
+metadata:
+  name: infinidat-iscsi
+provisioner: infinidat.com/iscsi
+parameters:
+# this id where the iscsi server is running
+  targetPortal: 172.17.72.58:3260
+
+# multiple namespace can specified, provisioner will balance those namespace among volumes
+  iscsi_namespaces: iscsi_66
+
+# will be removed this is the iscsi server iqn
+  initiators: iqn.2009-11.com.infinidat:storage:infinibox-sn-36000-113
+
+# this is the iscsi interface to be used, the default is default
+  iscsiInterface: default
+
+# pool name in which
+  pool_name: default
+
+# will be removed this is a comma separated list of initiators that will be give access to the created volumes, they must correspond to what you have configured in your nodes.
+  iqn: iqn.2009-11.com.infinidat:storage:infinibox-sn-36000-113
+
+# This is the filesystem you want your volume to be formatted with, default xfs
+  fsType: ext3
+
+# Whether the volume should be mounted in readonly mode, default false
+  readonly: "false"
+
+#will be removed
+  portals: 172.17.72.66
