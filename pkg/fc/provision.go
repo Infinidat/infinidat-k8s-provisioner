@@ -300,7 +300,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err 
 	lunNo = -1
 	for _, hostName := range arrayOfHosts {
 		id, _ := getHostId(hostName)
-		lun, err := mapping(id, volumeId,lunNo)
+		lun, err := mapping(id, volumeId,float64(lunNo))
 		if err != nil {
 			return 0, err
 		}
