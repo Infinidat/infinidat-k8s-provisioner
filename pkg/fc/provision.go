@@ -297,14 +297,14 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err 
 		}
 	}()
 
-	lunNo = 1000
+	lunNo = -1
 	for _, hostName := range arrayOfHosts {
 		id, _ := getHostId(hostName)
-		lun, err := mapping(id, volumeId)
+		lun, err := mapping(id, volumeId,lunNo)
 		if err != nil {
 			return 0, err
 		}
-		if int32(lun) < lunNo {
+		if int32(lun) > -1 {
 			lunNo = int32(lun)
 		}
 	}
@@ -317,7 +317,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err 
 }
 
 //Maps the volume to the host passed by calling function
-func mapping(hostId float64, volumeId float64) (lunno float64, err error) {
+func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while mapping volume to host " + fmt.Sprint(res))
@@ -325,8 +325,15 @@ func mapping(hostId float64, volumeId float64) (lunno float64, err error) {
 	}()
 
 	url := "api/rest/hosts/" + fmt.Sprint(hostId) + "/luns"
-	restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(map[string]interface{}{
-		"volume_id": volumeId}).Post(url)
+
+	body:=map[string]interface{}{
+		"volume_id": volumeId}
+
+	if lunNo > -1{
+		body["lun"]=lunNo
+	}
+
+	restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(body).Post(url)
 
 	resultPost, err := commons.CheckResponse(restPost, err)
 	if err != nil {

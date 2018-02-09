@@ -326,7 +326,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, er
 		if err != nil {
 			return 0, err
 		}
-		if lun < lunNo {
+		if lun > -1 {
 			lunNo = lun
 		}
 	}
