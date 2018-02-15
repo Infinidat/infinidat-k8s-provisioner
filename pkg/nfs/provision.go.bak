@@ -494,7 +494,7 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID float64, co
 /**
 Export should be updated in case of node addition and deletion in k8s cluster
 */
-func (p *nfsProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,deletedNodes ...*v1.Node) (err error ){
+func (p *nfsProvisioner) UpdateExport(pvList []*v1.PersistentVolume, nodeList []*v1.Node) (err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while updating export " + fmt.Sprint(res))

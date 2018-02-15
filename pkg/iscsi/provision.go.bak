@@ -11,7 +11,8 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.*/
-package fc
+package iscsi
+
 import (
 	"infinidat-k8s-provisioner/lib/commons"
 	"infinidat-k8s-provisioner/lib/controller"
@@ -27,45 +28,46 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-
 const (
 	// are we allowed to set this? else make up our own
 	annCreatedBy = "kubernetes.io/createdby"
 	createdBy    = "infinidat-dynamic-provisioner"
 )
-type FCProvisioner struct {
-	identity     types.UID
-	kubeVersion string
+type iscsiProvisioner struct {
+	networkspacesUsed int
+	identity         types.UID
+	targetdURL        string
+	kubeVersion       string
 }
 
-// NewFCProvisioner creates new FC provisioner
-func NewFCProvisioner(kubeVer string,identity types.UID) controller.Provisioner {
-	return &FCProvisioner{
+// NewISCSIProvisioner creates new iscsi provisioner
+func NewISCSIProvisioner(kubeVer string,identity types.UID) controller.Provisioner {
+	return &iscsiProvisioner{
+		networkspacesUsed: 1,
 		identity:         identity,
-		kubeVersion: kubeVer}
+		kubeVersion:       kubeVer}
 }
 
-// getAccessModes returns access modes FC volume supported.
-func (p *FCProvisioner) getAccessModes() []v1.PersistentVolumeAccessMode {
+// getAccessModes returns access modes iscsi volume supported.
+func (p *iscsiProvisioner) getAccessModes() []v1.PersistentVolumeAccessMode {
 	return []v1.PersistentVolumeAccessMode{
-		v1.ReadWriteOnce,
-	}
+		 v1.ReadWriteOnce,
+		}
 }
 
 //will map all pv's to nodes in cluster
-func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,deletedNodes ...*v1.Node) error {
-	hostList, err := commons.GetHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
+func (p *iscsiProvisioner) UpdateExport(pvList []*v1.PersistentVolume, nodeList []*v1.Node) error {
+	hostList, err := p.getHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
 	if err != nil {
 		return err
 	}
+
 	for _, pv := range pvList {
-		if pv.Spec.FC!=nil {
+		if pv.Spec.ISCSI!=nil {
 			ann := pv.ObjectMeta.Annotations
 			volumeid := ann["volumeId"]
-			lun:= ann["lun"]
 			if volumeid != "" && len(volumeid) > 0 {
 				volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-				lunNumber, _ := strconv.ParseFloat(lun, 64)
 				for _, hostName := range hostList {
 					hostID, err := getHostId(hostName)
 					if err != nil {
@@ -73,12 +75,13 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 					}
 					url := "api/rest/hosts/" + fmt.Sprint(hostID) + "/luns"
 					restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(map[string]interface{}{
-						"volume_id": volIDInfloat,"lun":lunNumber}).Post(url)
+						"volume_id": volIDInfloat}).Post(url)
 
 					_, err = commons.CheckResponse(restPost, err)
 					if err != nil {
 						if strings.Contains(err.Error(), "MAPPING_ALREADY_EXISTS") {
 							//ignore this error
+							glog.Infoln("mapping alreaded exist for ",hostName)
 						} else {
 							glog.Error("error while mapping pv to hostlist: " + pv.Name + " " + err.Error())
 						}
@@ -87,31 +90,11 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 			}
 		}
 	}
-	for _, node := range deletedNodes {
-
-		hostID, err := getHostId(node.Name)
-		if err != nil {
-			glog.Error(err)
-		}
-
-		for _, pv := range pvList {
-			if pv.Spec.FC!=nil {
-				ann := pv.ObjectMeta.Annotations
-				volumeid := ann["volumeId"]
-				if volumeid != "" && len(volumeid) > 0 {
-					volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-					commons.UnMap(hostID,volIDInfloat)
-				}
-
-			}
-		}
-
-	}
 	return nil
 }
 
 // Provision creates a storage asset and returns a PV object representing it.
-func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (pvobject *v1.PersistentVolume, err error) {
+func (p *iscsiProvisioner) Provision(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (pvobject *v1.PersistentVolume, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -129,10 +112,21 @@ func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[s
 		config[key] = value
 	}
 
-	wwpnlist, err := wwpnList()
+	//Validating NetworkSpace and Pool
+	validnwList,err  := commons.OneTimeValidation(config["pool_name"],config["iscsi_networkspaces"])
+	if err !=nil{
+		return nil, err
+	}
+
+
+
+	config["iscsi_networkspaces"] = validnwList
+
+	iqn,IPList, err := p.getIPndIQNForNetworkSpace(config["iscsi_networkspaces"])
 	if err != nil {
 		return nil, err
 	}
+	glog.Info("IQN in the provision method ", iqn)
 
 
 	vol, lun, volumeID, err := p.createVolume(options, config, nodeList)
@@ -140,11 +134,13 @@ func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[s
 		glog.Error(err)
 		return nil, err
 	}
+	//url,err:=url.Parse(commons.GetRestClient().HostURL)
+	//glog.Infoln("target portal from resty client ",url.Hostname())
+
 	annotations := make(map[string]string)
 	annotations[annCreatedBy] = createdBy
 	annotations["volume_name"] = vol
 	annotations["volumeId"] = fmt.Sprint(volumeID)
-	annotations["lun"]=fmt.Sprint(lun)
 
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -159,11 +155,14 @@ func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[s
 				v1.ResourceName(v1.ResourceStorage): options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)],
 			},
 			PersistentVolumeSource: v1.PersistentVolumeSource{
-				FC: &v1.FCVolumeSource{
-					TargetWWNs: wwpnlist,
-					Lun:        &lun,
-					ReadOnly:   getReadOnly(config["readonly"]),
-					FSType:     config["fsType"],
+				ISCSI: &v1.ISCSIPersistentVolumeSource{
+					TargetPortal:   IPList[0],
+					Portals:        IPList,
+					IQN:            iqn,
+					ISCSIInterface: "default",
+					Lun:            int32(lun),
+					ReadOnly:       getReadOnly(config["readonly"]),
+					FSType:         config["fsType"],
 				},
 			},
 		},
@@ -179,7 +178,7 @@ func getReadOnly(readonly string) bool {
 	return isReadOnly
 }
 
-func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun int32, volumeId float64, err error) {
+func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun float64, volumeId float64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while creating volume " + fmt.Sprint(res))
@@ -190,33 +189,32 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	pool := config["pool_name"]
 
-	hostList1, err := commons.GetHostList(nodeList)
+	hostList1, err := p.getHostList(nodeList)
 	if err != nil {
 		glog.Error(err)
 		return "", 0, 0, err
 	}
 
-	volumeId, err = p.volCreate(vol, pool, config,options)
+	volumeId, err = p.volCreate(vol, pool, config, options)
 	if err != nil {
 		glog.Error(err)
 		return "", 0, 0, err
 	}
-	glog.Info("Volume created: ", vol)
-
 	defer func() {
 		if res := recover(); res != nil{
 			err = errors.New("error while mapVolumeToHost volume " + fmt.Sprint(res))
 		}
 		if err!=nil && volumeId != 0 {
 			glog.Infoln("Seemes to be some problem reverting created volume id: ",volumeId)
-			p.volDestroy(volumeId,options.PVName,nodeList)
+			p.volDestroy(int64(volumeId),options.PVName,nodeList)
 		}
 	}()
 
+	glog.Info("Volume created: ", vol)
 
-	lun, err = mapVolumeToHost(hostList1, volumeId)
+	lun , err = mapVolumeToHost(hostList1, volumeId)
 	if err != nil {
-		return "", 0, 0, err
+		return "",0, 0, err
 	}
 
 	defer func() {
@@ -230,7 +228,7 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 				if err!=nil{
 					glog.Error(err)
 				}
-				commons.UnMap(hostid,volumeId)
+				p.unMap(hostid,int64(volumeId))
 			}
 
 		}
@@ -239,9 +237,8 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	err = commons.AttachMetadata(int(volumeId), options, p.kubeVersion,config["fsType"])
 	if err != nil {
-		return "", 0, 0, err
+		return "",0, 0, err
 	}
-
 	defer func() {
 		if res := recover(); res != nil{
 			err = errors.New("error while creating volume " + fmt.Sprint(res))
@@ -252,15 +249,19 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 		}
 	}()
 
+
+
+
+
 	return vol, lun, volumeId, nil
 }
 
-func (p *FCProvisioner) getVolumeName(options controller.VolumeOptions) string {
+func (p *iscsiProvisioner) getVolumeName(options controller.VolumeOptions) string {
 	return options.PVName
 }
 
 // volCreate calls vol_create targetd API to create a volume.
-func (p *FCProvisioner) volCreate(name string, pool string, config map[string]string, options controller.VolumeOptions) ( volid float64, err error) {
+func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string]string, options controller.VolumeOptions) (volid float64, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -300,19 +301,17 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 
 	resultpostcreate, err := commons.CheckResponse(resCreate, err)
 	if err != nil {
-		glog.Error(err)
+		glog.Info(err)
 	}
 	result := resultpostcreate.(map[string]interface{})
 
 	volumeId = result["id"].(float64)
 
-
-
 	return  volumeId, nil
 }
 
 //Map recently created volume with all host mentioned in export list
-func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err error) {
+func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -323,17 +322,20 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err 
 	lunNo = -1
 	for _, hostName := range arrayOfHosts {
 		id, _ := getHostId(hostName)
-		lun, err := mapping(id, volumeId,float64(lunNo))
+		lun, err := mapping(id, volumeId,lunNo)
 		if err != nil {
 			return 0, err
 		}
-		if int32(lun) > -1 {
-			lunNo = int32(lun)
+		if lun > -1 {
+			lunNo = lun
 		}
 	}
+	//As lunID should be in 0-255 range
+	if lunNo < 0 || lunNo > 255 {
+		return 0, errors.New("no host found to map volume hence lunid not found ")
+	}
 
-
-	return int32(lunNo) , nil
+	return lunNo, nil
 }
 
 //Maps the volume to the host passed by calling function
@@ -343,7 +345,6 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 			err = errors.New("error while mapping volume to host " + fmt.Sprint(res))
 		}
 	}()
-
 
 	body:=map[string]interface{}{
 		"volume_id": volumeId}
@@ -355,17 +356,16 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 	url := "api/rest/hosts/" + fmt.Sprint(hostId) + "/luns"
 	restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(body).Post(url)
 
+
 	resultPost, err := commons.CheckResponse(restPost, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "MAPPING_ALREADY_EXISTS") {
-			//ignore this error
+			//ignore
 		} else {
 			return 0, err
 		}
 	}
 	lunofVolume := resultPost.(map[string]interface{})
-
-
 	return lunofVolume["lun"].(float64), nil
 }
 
@@ -431,43 +431,103 @@ func getNumberOfVolumes() (no float64, err error) {
 	return wholeMap["number_of_objects"].(float64), nil
 }
 
-
-func wwpnList()(list []string,err error){
-
+// getHostList returns []string ie host registered on infinibox by administrator which is present in k8s cluster
+func (p *iscsiProvisioner) getHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while getting wwpn list " + fmt.Sprint(res))
+			err = errors.New("error while getting host list " + fmt.Sprint(res))
 		}
 	}()
 
-	urlFC := "api/rest/components/nodes"
-	var wwpno string
-
-
-	resFC, err := commons.GetRestClient().R().SetQueryString("fields=fc_ports").
-		Get(urlFC)
-
-	var wwpnList []string
-
-	resssFc , err := commons.CheckResponse(resFC, err)
+	var hostList []string
+	urlGet := "api/rest/hosts"
+	getHostResponse, err := commons.GetRestClient().R().Get(urlGet)
+	getHostResult, err := commons.CheckResponse(getHostResponse, err)
 	if err != nil {
-		return wwpnList,err
+		return hostList, err
 	}
 
-	arrayOfresult := resssFc.([]interface{})
-	for _,fcPort := range arrayOfresult {
-		result := fcPort.(map[string]interface{})
-		arrayofFCports := result["fc_ports"].([]interface{})
-		for _, fcport := range arrayofFCports{
-			fcfields := fcport.(map[string]interface{})
-			if fcfields["link_state"] == "UP" {
-				wwpno = fmt.Sprint(fcfields["wwpn"])
-				wwpno = strings.Replace(wwpno,":","",-1)
-				wwpnList = append(wwpnList, fmt.Sprint(wwpno))
+	arrayOfHosts := getHostResult.([]interface{})
+	for _, hostFromInfiniBox := range arrayOfHosts {
+		hostCastedInMap := hostFromInfiniBox.(map[string]interface{})
+		for _, node := range k8sNodeList {
+			if node.ObjectMeta.Name == hostCastedInMap["name"] {
+				hostList = append(hostList, fmt.Sprint(hostCastedInMap["name"]))
 			}
 		}
 	}
+	glog.V(5).Infoln("hostList ",hostList)
+	return hostList, nil
+}
+func getTargetIQN(networkSpaceName string) (iqn string,err error){
+	defer func() {
+		if res := recover(); res != nil && err == nil {
+			err = errors.New("error while getting target iqn " + fmt.Sprint(res))
+		}
+	}()
 
-	return wwpnList,nil
+
+	urlNwID := "api/rest/network/spaces"
+
+
+	resFC, err := commons.GetRestClient().R().SetQueryString("name=" + networkSpaceName).
+		Get(urlNwID)
+
+	var iqnNo string
+
+	resNw , err := commons.CheckResponse(resFC, err)
+	if err != nil{
+		return iqnNo ,err
+	}
+	arrayOfresult := resNw.([]interface{})
+	for _,networkspace := range arrayOfresult {
+		result := networkspace.(map[string]interface{})
+		properties:=result["properties"].(map[string]interface{})
+		iqnNo = fmt.Sprint(properties["iscsi_iqn"])
+
+
+	}
+	return iqnNo,nil
+}
+
+
+func (p *iscsiProvisioner) getIPndIQNForNetworkSpace(networkSpaces string) (iqnno string ,list []string, err error) {
+	defer func() {
+		if res := recover(); res != nil && err == nil {
+			err = errors.New("error while getting ip list of networkspace" + fmt.Sprint(res))
+		}
+	}()
+	netSpaces := strings.Split(networkSpaces, ",")
+	name := strings.Trim(netSpaces[p.networkspacesUsed%len(netSpaces)], " ")
+	var ipList []string
+	var iqn string
+	url := "api/rest/network/spaces"
+
+
+	if name == "" {
+		return "",ipList, errors.New("provided empty networkspace name ")
+	}
+
+	iqn , err = getTargetIQN(name)
+	if err!=nil{
+		return "",ipList,err
+	}
+
+	response, err := commons.GetRestClient().R().SetQueryString("name=" + name).Get(url)
+	result, err := commons.CheckResponse(response, err)
+	if err != nil {
+		return "" , ipList, err
+	}
+	arrayOfResult := result.([]interface{})
+	firstIndex := arrayOfResult[0].(map[string]interface{})
+	arrayOfIps := firstIndex["ips"].([]interface{})
+
+	for _, ip := range arrayOfIps {
+		ipAddresses := ip.(map[string]interface{})
+		ipList = append(ipList, fmt.Sprint(ipAddresses["ip_address"]))
+
+	}
+	p.networkspacesUsed++
+	return iqn,ipList, nil
 }

@@ -11,7 +11,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.*/
-package iscsi
+package fc
 
 import (
 	"infinidat-k8s-provisioner/lib/commons"
@@ -21,18 +21,16 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	"strconv"
-
 )
 
 // Delete removes the volume that was created by Provision
 // PV and unmaps from k8s host.
-func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string]string, nodeList []*v1.Node) (err error) {
+func (p *FCProvisioner) Delete(volume *v1.PersistentVolume, config map[string]string, nodeList []*v1.Node) (err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while deleting volume " + fmt.Sprint(res))
 		}
 	}()
-
 	provisioned, err := p.provisioned(volume)
 	if err != nil {
 		return fmt.Errorf("error determining if this provisioner was the one to provision volume %q: %v", volume.Name, err)
@@ -42,44 +40,15 @@ func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string
 		return &controller.IgnoredError{Reason: strerr}
 	}
 
-
 	glog.Info("volume deletion request received: ", volume.GetName())
 
 	if volume.Annotations["volumeId"] == "" {
 		return errors.New("volumeid is empty")
 	}
-	volId, err := strconv.ParseInt(volume.Annotations["volumeId"],10, 64)
+	volId, err := strconv.ParseFloat(volume.Annotations["volumeId"], 64)
 	if err != nil {
 		return err
 	}
-
-
-	//removes metatada about volume from infinibox
-	err = commons.DetachMetadata(volId,volume.GetName())
-	if err != nil {
-		return err
-	}
-
-
-	//Unmap volume
-	hostList1, err := commons.GetHostList(nodeList)
-	if err != nil {
-		glog.Error(err)
-	}
-	for _, name := range hostList1 {
-		hostid, err := getHostId(name)
-
-		if err != nil {
-			//it should not return hence printing it.
-			glog.Error(hostid)
-		}
-		err = commons.UnMap(hostid, float64(volId))
-		if err != nil {
-				return err
-		}
-	}
-
-	//Destroy Volume
 	err = p.volDestroy(volId, volume.Annotations["volume_name"], nodeList)
 	if err != nil {
 		glog.Error(err)
@@ -91,14 +60,35 @@ func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string
 }
 
 // deletes volume
-func (p *iscsiProvisioner) volDestroy(volId int64, vol string, nodeList []*v1.Node) (err error) {
+func (p *FCProvisioner) volDestroy(volId float64, vol string, nodeList []*v1.Node) (err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while volume deleting " + fmt.Sprint(res))
 		}
 	}()
+	//removes metatada about volume from infinibox
+	err = commons.DetachMetadata(int64(volId), vol)
+	if err != nil {
+		return err
+	}
 
+	hostList1, err := p.getHostList(nodeList)
+	if err != nil {
+		glog.Error(err)
+	}
+
+	for _, name := range hostList1 {
+		hostid, err := getHostId(name)
+		if err != nil {
+			//it should not return hence printing it.
+			glog.Error(hostid)
+		}
+		err = p.unMap(hostid, volId)
+		if err != nil {
+			return err
+		}
+	}
 
 	urldeleteVolume := "api/rest/volumes/" + fmt.Sprint(volId)
 	resdel, err := commons.GetRestClient().R().SetQueryString("approved=true").Delete(urldeleteVolume)
@@ -114,9 +104,25 @@ func (p *iscsiProvisioner) volDestroy(volId int64, vol string, nodeList []*v1.No
 	return nil
 }
 
+func  (p *FCProvisioner) unMap(hostId float64, volId float64) (err error) {
+	defer func() {
+		if res := recover(); res != nil && err == nil {
+			err = errors.New("error while unmap volume " + fmt.Sprint(res))
+		}
+	}()
 
-
-func (p *iscsiProvisioner) provisioned(volume *v1.PersistentVolume) (bool, error) {
+	urlUnmap := "api/rest/hosts/" + fmt.Sprint(hostId) + "/luns/volume_id/" + fmt.Sprint(volId)
+	unmapResponse, err := commons.GetRestClient().R().SetQueryString("approved=true").Delete(urlUnmap)
+	if err != nil {
+		glog.Error(err)
+	}
+	_, err = commons.CheckResponse(unmapResponse, err)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (p *FCProvisioner) provisioned(volume *v1.PersistentVolume) (bool, error) {
 	provisionerID, ok := volume.Annotations[annCreatedBy]
 	if !ok {
 		return false, fmt.Errorf("PV doesn't have an annotation %s", annCreatedBy)

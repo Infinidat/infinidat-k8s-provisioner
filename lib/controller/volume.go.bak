@@ -40,7 +40,7 @@ type Provisioner interface {
 		update host to volume mapping
 		mostly triggered in casse of cluster level changes
 	*/
-	UpdateMapping([]*v1.PersistentVolume, []*v1.Node, ...*v1.Node) error
+	UpdateExport([]*v1.PersistentVolume, []*v1.Node) error
 }
 
 // IgnoredError is the value for Delete to return to indicate that the call has

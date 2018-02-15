@@ -489,11 +489,11 @@ func (ctrl *ProvisionController) nodeAdded(obj interface{}) {
 	if !ok {
 		return
 	}
-	glog.V(1).Info("Node added with addresses ", node.Status.Addresses)
+	glog.V(4).Info("Node added with addresses ", node.Status.Addresses)
 	//call all provisioner to update export
 	for pname, provisioner := range ctrl.proviserners {
 		if strings.Contains(pname, "/") { //so that default provisioner will get call only once
-			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList())
+			err := provisioner.UpdateExport(ctrl.getPVList(), ctrl.getNodeList())
 			if err != nil {
 				glog.Error("error while updating exports for: ", pname, " ", err)
 			}
@@ -505,11 +505,11 @@ func (ctrl *ProvisionController) nodeDeleted(obj interface{}) {
 	if !ok {
 		return
 	}
-	glog.V(1).Info("Node deleted with details ", node.Status.Addresses)
+	glog.V(4).Info("Node deleted with details ", node.Status.Addresses)
 	//call all provisioner to update export
 	for pname, provisioner := range ctrl.proviserners {
 		if strings.Contains(pname, "/") { //so that default provisioner will get call only once
-			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList(),node)
+			err := provisioner.UpdateExport(ctrl.getPVList(), ctrl.getNodeList())
 			if err != nil {
 				glog.Error("error while updating exports for: ", pname, " ", err)
 			}
@@ -533,11 +533,11 @@ func (ctrl *ProvisionController) nodeUpdated(oldObj, newObj interface{}) {
 	if reflect.DeepEqual(oldnode.Status.Addresses, newnode.Status.Addresses) {
 		return
 	}
-	glog.V(1).Info("Node addresses are updated  ", newnode.Status.Addresses)
+	glog.V(4).Info("Node addresses are updated  ", newnode.Status.Addresses)
 	//call all provisioner to update export
 	for pname, provisioner := range ctrl.proviserners {
 		if strings.Contains(pname, "/") { //so that default provisioner will get call only once
-			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList())
+			err := provisioner.UpdateExport(ctrl.getPVList(), ctrl.getNodeList())
 			if err != nil {
 				glog.Info("error updating exports for: ", pname, " ", err)
 			}
@@ -890,7 +890,7 @@ func GetPersistentVolumeClass(volume *v1.PersistentVolume) string {
 func (ctrl *ProvisionController) provisionClaimOperation(claim *v1.PersistentVolumeClaim) error {
 	// Most code here is identical to that found in controller.go of kube's PV controller...
 	claimClass := GetPersistentVolumeClaimClass(claim)
-	glog.V(1).Infof("provisionClaimOperation [%s] started, class: %q", claimToClaimKey(claim), claimClass)
+	glog.V(4).Infof("provisionClaimOperation [%s] started, class: %q", claimToClaimKey(claim), claimClass)
 
 	//  A previous doProvisionClaim may just have finished while we were waiting for
 	//  the locks. Check that PV (with deterministic name) hasn't been provisioned
@@ -899,7 +899,7 @@ func (ctrl *ProvisionController) provisionClaimOperation(claim *v1.PersistentVol
 	volume, err := ctrl.client.CoreV1().PersistentVolumes().Get(pvName, metav1.GetOptions{})
 	if err == nil && volume != nil {
 		// Volume has been already provisioned, nothing to do.
-		glog.V(1).Infof("provisionClaimOperation [%s]: volume already exists, skipping", claimToClaimKey(claim))
+		glog.V(4).Infof("provisionClaimOperation [%s]: volume already exists, skipping", claimToClaimKey(claim))
 		return nil
 	}
 
@@ -968,7 +968,7 @@ func (ctrl *ProvisionController) provisionClaimOperation(claim *v1.PersistentVol
 
 	// Try to create the PV object several times
 	for i := 0; i < ctrl.createProvisionedPVRetryCount; i++ {
-		glog.V(1).Infof("provisionClaimOperation [%s]: trying to save volume %s", claimToClaimKey(claim), volume.Name)
+		glog.V(4).Infof("provisionClaimOperation [%s]: trying to save volume %s", claimToClaimKey(claim), volume.Name)
 		if _, err = ctrl.client.CoreV1().PersistentVolumes().Create(volume); err == nil {
 			// Save succeeded.
 			glog.Infof("volume %q for claim %q saved", volume.Name, claimToClaimKey(claim))
@@ -992,7 +992,7 @@ func (ctrl *ProvisionController) provisionClaimOperation(claim *v1.PersistentVol
 			glog.Infoln()
 			if err = ctrl.proviserners[provisioner].Delete(volume, ctrl.getConfiguration(), ctrl.getNodeList()); err == nil {
 				// Delete succeeded
-				glog.V(1).Infof("provisionClaimOperation [%s]: cleaning volume %s succeeded", claimToClaimKey(claim), volume.Name)
+				glog.V(4).Infof("provisionClaimOperation [%s]: cleaning volume %s succeeded", claimToClaimKey(claim), volume.Name)
 				break
 			}
 			// Delete failed, try again after a while.
@@ -1043,7 +1043,7 @@ func (ctrl *ProvisionController) watchProvisioning(claim *v1.PersistentVolumeCla
 				case *v1.PersistentVolumeClaim:
 					// PVC changed
 					claim := event.Object.(*v1.PersistentVolumeClaim)
-					glog.V(1).Infof("claim update received: %s %s/%s %s", event.Type, claim.Namespace, claim.Name, claim.Status.Phase)
+					glog.V(4).Infof("claim update received: %s %s/%s %s", event.Type, claim.Namespace, claim.Name, claim.Status.Phase)
 					switch event.Type {
 					case watch.Added, watch.Modified:
 						if claim.Spec.VolumeName != "" {
@@ -1065,7 +1065,7 @@ func (ctrl *ProvisionController) watchProvisioning(claim *v1.PersistentVolumeCla
 				case *v1.Event:
 					// Event received
 					claimEvent := event.Object.(*v1.Event)
-					glog.V(1).Infof("claim event received: %s %s/%s %s/%s %s", event.Type, claimEvent.Namespace, claimEvent.Name, claimEvent.InvolvedObject.Namespace, claimEvent.InvolvedObject.Name, claimEvent.Reason)
+					glog.V(4).Infof("claim event received: %s %s/%s %s/%s %s", event.Type, claimEvent.Namespace, claimEvent.Name, claimEvent.InvolvedObject.Namespace, claimEvent.InvolvedObject.Name, claimEvent.Reason)
 					if claimEvent.Reason == "ProvisioningSucceeded" {
 						successCh <- true
 					} else if claimEvent.Reason == "ProvisioningFailed" {
@@ -1170,7 +1170,7 @@ func (ctrl *ProvisionController) getPVCEventWatch(claim *v1.PersistentVolumeClai
 }
 
 func (ctrl *ProvisionController) deleteVolumeOperation(volume *v1.PersistentVolume) error {
-	glog.V(1).Infof("deleteVolumeOperation [%s] started", volume.Name)
+	glog.V(4).Infof("deleteVolumeOperation [%s] started", volume.Name)
 
 	// This method may have been waiting for a volume lock for some time.
 	// Our check does not have to be as sophisticated as PV controller's, we can
@@ -1200,7 +1200,7 @@ func (ctrl *ProvisionController) deleteVolumeOperation(volume *v1.PersistentVolu
 
 	glog.Infof("volume %q deleted", volume.Name)
 
-	glog.V(1).Infof("deleteVolumeOperation [%s]: success", volume.Name)
+	glog.V(4).Infof("deleteVolumeOperation [%s]: success", volume.Name)
 	glog.Infoln()
 	// Delete the volume
 	if err = ctrl.client.CoreV1().PersistentVolumes().Delete(volume.Name, nil); err != nil {
@@ -1228,7 +1228,7 @@ func (ctrl *ProvisionController) scheduleOperation(operationName string, operati
 	err := ctrl.runningOperations.Run(operationName, operation)
 	if err != nil {
 		if goroutinemap.IsAlreadyExists(err) {
-			glog.V(1).Infof("operation %q is already running, skipping", operationName)
+			glog.V(4).Infof("operation %q is already running, skipping", operationName)
 		} else {
 			glog.Errorf("Error scheduling operation %q: %v", operationName, err)
 		}

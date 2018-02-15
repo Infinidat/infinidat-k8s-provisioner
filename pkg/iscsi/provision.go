@@ -56,16 +56,19 @@ func (p *iscsiProvisioner) getAccessModes() []v1.PersistentVolumeAccessMode {
 }
 
 //will map all pv's to nodes in cluster
-func (p *iscsiProvisioner) UpdateExport(pvList []*v1.PersistentVolume, nodeList []*v1.Node) error {
-	hostList, err := p.getHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
+func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,deletedNodes ...*v1.Node) error {
+	hostList, err := commons.GetHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
 	if err != nil {
 		return err
 	}
+
 
 	for _, pv := range pvList {
 		if pv.Spec.ISCSI!=nil {
 			ann := pv.ObjectMeta.Annotations
 			volumeid := ann["volumeId"]
+			lun:= ann["lun"]
+			lunNumber, _ := strconv.ParseFloat(lun, 64)
 			if volumeid != "" && len(volumeid) > 0 {
 				volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
 				for _, hostName := range hostList {
@@ -73,9 +76,10 @@ func (p *iscsiProvisioner) UpdateExport(pvList []*v1.PersistentVolume, nodeList 
 					if err != nil {
 						glog.Error(err)
 					}
+
 					url := "api/rest/hosts/" + fmt.Sprint(hostID) + "/luns"
 					restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(map[string]interface{}{
-						"volume_id": volIDInfloat}).Post(url)
+						"volume_id": volIDInfloat,"lun":lunNumber}).Post(url)
 
 					_, err = commons.CheckResponse(restPost, err)
 					if err != nil {
@@ -89,6 +93,28 @@ func (p *iscsiProvisioner) UpdateExport(pvList []*v1.PersistentVolume, nodeList 
 				}
 			}
 		}
+	}
+
+
+	for _, node := range deletedNodes {
+		hostID, err := getHostId(node.Name)
+		if err != nil {
+			glog.Error(err)
+		}
+
+		for _, pv := range pvList {
+			if pv.Spec.ISCSI!=nil {
+				ann := pv.ObjectMeta.Annotations
+				volumeid := ann["volumeId"]
+
+				if volumeid != "" && len(volumeid) > 0 {
+					volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
+					commons.UnMap(hostID,volIDInfloat)
+				}
+
+			}
+		}
+
 	}
 	return nil
 }
@@ -141,6 +167,7 @@ func (p *iscsiProvisioner) Provision(options controller.VolumeOptions, config ma
 	annotations[annCreatedBy] = createdBy
 	annotations["volume_name"] = vol
 	annotations["volumeId"] = fmt.Sprint(volumeID)
+	annotations["lun"]=fmt.Sprint(lun)
 
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -189,7 +216,7 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 
 	pool := config["pool_name"]
 
-	hostList1, err := p.getHostList(nodeList)
+	hostList1, err := commons.GetHostList(nodeList)
 	if err != nil {
 		glog.Error(err)
 		return "", 0, 0, err
@@ -228,7 +255,7 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 				if err!=nil{
 					glog.Error(err)
 				}
-				p.unMap(hostid,int64(volumeId))
+				commons.UnMap(hostid,volumeId)
 			}
 
 		}
@@ -319,21 +346,20 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, er
 		}
 	}()
 
+
 	lunNo = -1
 	for _, hostName := range arrayOfHosts {
 		id, _ := getHostId(hostName)
-		lun, err := mapping(id, volumeId,lunNo)
+		newLunNo, err := mapping(id, volumeId,lunNo)
 		if err != nil {
 			return 0, err
 		}
-		if lun > -1 {
-			lunNo = lun
+		if newLunNo > lunNo {
+			//because we want same lun number to all host for single volume
+			lunNo = newLunNo
 		}
 	}
-	//As lunID should be in 0-255 range
-	if lunNo < 0 || lunNo > 255 {
-		return 0, errors.New("no host found to map volume hence lunid not found ")
-	}
+
 
 	return lunNo, nil
 }
@@ -349,7 +375,7 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 	body:=map[string]interface{}{
 		"volume_id": volumeId}
 
-	if lunNo > -1{
+	if lunNo > -1{//only first time it will be -1, henceforth it will be greater than -1
 		body["lun"]=lunNo
 	}
 
@@ -431,35 +457,7 @@ func getNumberOfVolumes() (no float64, err error) {
 	return wholeMap["number_of_objects"].(float64), nil
 }
 
-// getHostList returns []string ie host registered on infinibox by administrator which is present in k8s cluster
-func (p *iscsiProvisioner) getHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 
-	defer func() {
-		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while getting host list " + fmt.Sprint(res))
-		}
-	}()
-
-	var hostList []string
-	urlGet := "api/rest/hosts"
-	getHostResponse, err := commons.GetRestClient().R().Get(urlGet)
-	getHostResult, err := commons.CheckResponse(getHostResponse, err)
-	if err != nil {
-		return hostList, err
-	}
-
-	arrayOfHosts := getHostResult.([]interface{})
-	for _, hostFromInfiniBox := range arrayOfHosts {
-		hostCastedInMap := hostFromInfiniBox.(map[string]interface{})
-		for _, node := range k8sNodeList {
-			if node.ObjectMeta.Name == hostCastedInMap["name"] {
-				hostList = append(hostList, fmt.Sprint(hostCastedInMap["name"]))
-			}
-		}
-	}
-	glog.V(5).Infoln("hostList ",hostList)
-	return hostList, nil
-}
 func getTargetIQN(networkSpaceName string) (iqn string,err error){
 	defer func() {
 		if res := recover(); res != nil && err == nil {

@@ -73,7 +73,7 @@ func (p *FCProvisioner) volDestroy(volId float64, vol string, nodeList []*v1.Nod
 		return err
 	}
 
-	hostList1, err := p.getHostList(nodeList)
+	hostList1, err := commons.GetHostList(nodeList)
 	if err != nil {
 		glog.Error(err)
 	}
@@ -84,7 +84,7 @@ func (p *FCProvisioner) volDestroy(volId float64, vol string, nodeList []*v1.Nod
 			//it should not return hence printing it.
 			glog.Error(hostid)
 		}
-		err = p.unMap(hostid, volId)
+		err = commons.UnMap(hostid, volId)
 		if err != nil {
 			return err
 		}
@@ -104,24 +104,7 @@ func (p *FCProvisioner) volDestroy(volId float64, vol string, nodeList []*v1.Nod
 	return nil
 }
 
-func  (p *FCProvisioner) unMap(hostId float64, volId float64) (err error) {
-	defer func() {
-		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while unmap volume " + fmt.Sprint(res))
-		}
-	}()
 
-	urlUnmap := "api/rest/hosts/" + fmt.Sprint(hostId) + "/luns/volume_id/" + fmt.Sprint(volId)
-	unmapResponse, err := commons.GetRestClient().R().SetQueryString("approved=true").Delete(urlUnmap)
-	if err != nil {
-		glog.Error(err)
-	}
-	_, err = commons.CheckResponse(unmapResponse, err)
-	if err != nil {
-		return err
-	}
-	return nil
-}
 func (p *FCProvisioner) provisioned(volume *v1.PersistentVolume) (bool, error) {
 	provisionerID, ok := volume.Annotations[annCreatedBy]
 	if !ok {

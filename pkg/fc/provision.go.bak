@@ -53,8 +53,8 @@ func (p *FCProvisioner) getAccessModes() []v1.PersistentVolumeAccessMode {
 }
 
 //will map all pv's to nodes in cluster
-func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,deletedNodes ...*v1.Node) error {
-	hostList, err := commons.GetHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
+func (p *FCProvisioner) UpdateExport(pvList []*v1.PersistentVolume, nodeList []*v1.Node) error {
+	hostList, err := p.getHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
 	if err != nil {
 		return err
 	}
@@ -62,10 +62,8 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 		if pv.Spec.FC!=nil {
 			ann := pv.ObjectMeta.Annotations
 			volumeid := ann["volumeId"]
-			lun:= ann["lun"]
 			if volumeid != "" && len(volumeid) > 0 {
 				volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-				lunNumber, _ := strconv.ParseFloat(lun, 64)
 				for _, hostName := range hostList {
 					hostID, err := getHostId(hostName)
 					if err != nil {
@@ -73,7 +71,7 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 					}
 					url := "api/rest/hosts/" + fmt.Sprint(hostID) + "/luns"
 					restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(map[string]interface{}{
-						"volume_id": volIDInfloat,"lun":lunNumber}).Post(url)
+						"volume_id": volIDInfloat}).Post(url)
 
 					_, err = commons.CheckResponse(restPost, err)
 					if err != nil {
@@ -86,26 +84,6 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 				}
 			}
 		}
-	}
-	for _, node := range deletedNodes {
-
-		hostID, err := getHostId(node.Name)
-		if err != nil {
-			glog.Error(err)
-		}
-
-		for _, pv := range pvList {
-			if pv.Spec.FC!=nil {
-				ann := pv.ObjectMeta.Annotations
-				volumeid := ann["volumeId"]
-				if volumeid != "" && len(volumeid) > 0 {
-					volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-					commons.UnMap(hostID,volIDInfloat)
-				}
-
-			}
-		}
-
 	}
 	return nil
 }
@@ -144,7 +122,6 @@ func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[s
 	annotations[annCreatedBy] = createdBy
 	annotations["volume_name"] = vol
 	annotations["volumeId"] = fmt.Sprint(volumeID)
-	annotations["lun"]=fmt.Sprint(lun)
 
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -190,7 +167,7 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	pool := config["pool_name"]
 
-	hostList1, err := commons.GetHostList(nodeList)
+	hostList1, err := p.getHostList(nodeList)
 	if err != nil {
 		glog.Error(err)
 		return "", 0, 0, err
@@ -230,7 +207,7 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 				if err!=nil{
 					glog.Error(err)
 				}
-				commons.UnMap(hostid,volumeId)
+				p.unMap(hostid,volumeId)
 			}
 
 		}
@@ -331,7 +308,10 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err 
 			lunNo = int32(lun)
 		}
 	}
-
+	//As lunID should be in 0-255 range
+	if lunNo < 0 || lunNo > 255 {
+		return 0, errors.New("no host found to map volume hence lunid not found ")
+	}
 
 	return int32(lunNo) , nil
 }
@@ -344,6 +324,7 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 		}
 	}()
 
+	url := "api/rest/hosts/" + fmt.Sprint(hostId) + "/luns"
 
 	body:=map[string]interface{}{
 		"volume_id": volumeId}
@@ -352,7 +333,6 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 		body["lun"]=lunNo
 	}
 
-	url := "api/rest/hosts/" + fmt.Sprint(hostId) + "/luns"
 	restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(body).Post(url)
 
 	resultPost, err := commons.CheckResponse(restPost, err)
@@ -431,6 +411,35 @@ func getNumberOfVolumes() (no float64, err error) {
 	return wholeMap["number_of_objects"].(float64), nil
 }
 
+// getHostList returns []string ie host registered on infinibox by administrator which is present in k8s cluster
+func (p *FCProvisioner) getHostList(k8sNodeList []*v1.Node) (list []string, err error) {
+
+	defer func() {
+		if res := recover(); res != nil && err == nil {
+			err = errors.New("error while getting host list " + fmt.Sprint(res))
+		}
+	}()
+
+	var hostList []string
+	urlGet := "api/rest/hosts"
+	getHostResponse, err := commons.GetRestClient().R().Get(urlGet)
+	getHostResult, err := commons.CheckResponse(getHostResponse, err)
+	if err != nil {
+		return hostList, err
+	}
+
+	arrayOfHosts := getHostResult.([]interface{})
+	for _, hostFromInfiniBox := range arrayOfHosts {
+		hostCastedInMap := hostFromInfiniBox.(map[string]interface{})
+		for _, node := range k8sNodeList {
+			if node.Name == hostCastedInMap["name"] {
+				hostList = append(hostList, fmt.Sprint(hostCastedInMap["name"]))
+			}
+		}
+	}
+
+	return hostList, nil
+}
 
 func wwpnList()(list []string,err error){
 

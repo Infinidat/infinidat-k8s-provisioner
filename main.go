@@ -1,14 +1,14 @@
 package main
 
 import (
-	"Infinidat-k8s-provisioner/lib/controller"
-	"Infinidat-k8s-provisioner/pkg/iscsi"
-	"Infinidat-k8s-provisioner/pkg/nfs"
+	"infinidat-k8s-provisioner/lib/controller"
+	"infinidat-k8s-provisioner/pkg/iscsi"
+	"infinidat-k8s-provisioner/pkg/nfs"
 	"flag"
 	"github.com/golang/glog"
 	//"k8s.io/apimachinery/pkg/util/validation"
 	//"k8s.io/apimachinery/pkg/util/validation/field"
-	"Infinidat-k8s-provisioner/pkg/fc"
+	"infinidat-k8s-provisioner/pkg/fc"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
