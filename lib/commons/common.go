@@ -42,7 +42,7 @@ func CheckResponse(res *resty.Response, err error) (result interface{}, er error
 	}()
 
 	if res.StatusCode() == http.StatusUnauthorized {
-		glog.Error("Authentication with specific InfiniBox failed : " + res.Request.URL)
+		glog.Error("Request authentication failed for : " + res.Request.URL)
 		return nil, errors.New(res.Status())
 	}
 
