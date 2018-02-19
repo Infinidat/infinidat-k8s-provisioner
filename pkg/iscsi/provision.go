@@ -244,6 +244,10 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 		return "",0, 0, err
 	}
 
+	if lun == -1 {
+		return "",0,0,errors.New("volume not mapped to any host")
+	}
+
 	defer func() {
 		if res := recover(); res != nil{
 			err = errors.New("error while AttachMetadata volume " + fmt.Sprint(res))

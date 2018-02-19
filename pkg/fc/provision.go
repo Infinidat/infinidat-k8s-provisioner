@@ -218,6 +218,9 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 	if err != nil {
 		return "", 0, 0, err
 	}
+	if lun == -1 {
+		return "",0,0,errors.New("volume not mapped to any host")
+	}
 
 	defer func() {
 		if res := recover(); res != nil{

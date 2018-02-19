@@ -239,11 +239,7 @@ func OneTimeValidation(poolname string, networkspace string) ( list string , err
 
 		if flag{
 			arrayOfValidnetspaces = append(arrayOfValidnetspaces, name)
-			/*if validList == ""{
-				validList = name
-			}else{
-				validList = validList + "," + name
-			}*/
+
 		}
 	}
 	if len(arrayOfValidnetspaces)>0{
@@ -302,7 +298,7 @@ func GetHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 		}
 		var response interface{}
 		if err := json.Unmarshal(resGet.Body(), &response); err != nil {
-			glog.Info("Error while decoding Json or casting jsondata to record object", err)
+			glog.Error("Error while decoding Json or casting jsondata to record object", err)
 		}
 		var wholeMap map[string]interface{}
 		if response != nil {
@@ -318,6 +314,8 @@ func GetHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 					wholeMap = result.(map[string]interface{})
 					if wholeMap["number_of_objects"].(float64) > 0{
 						hostList=append(hostList,node.Name)
+					}else{
+						glog.Infoln("cluster node is not added on infinibox: ",node.Name)
 					}
 				}
 			}
