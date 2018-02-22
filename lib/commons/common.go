@@ -42,8 +42,7 @@ func CheckResponse(res *resty.Response, err error) (result interface{}, er error
 	}()
 
 	if res.StatusCode() == http.StatusUnauthorized {
-		glog.Error("Request authentication failed for : " + res.Request.URL)
-		return nil, errors.New(res.Status())
+		return nil, errors.New("Request authentication failed for : " + res.Request.URL)
 	}
 
 	if res.StatusCode() == http.StatusServiceUnavailable{
@@ -51,8 +50,7 @@ func CheckResponse(res *resty.Response, err error) (result interface{}, er error
 	}
 
 	if err != nil {
-		glog.Error("Error While Resty call for request ", res.Request.URL)
-		return nil, err
+		return nil, errors.New("Error While Resty call for request " + res.Request.URL + err.Error())
 	}
 	var response interface{}
 	if er := json.Unmarshal(res.Body(), &response); er != nil {
@@ -124,7 +122,7 @@ func AttachMetadata(resourceId int, options controller.VolumeOptions, kuberVersi
 		Put(urlmd)
 	resulput, err := CheckResponse(resmd, err)
 	if err != nil {
-		return err
+		return errors.New("["+options.PVName+"] "+err.Error())
 
 	}
 	_ = resulput
@@ -148,7 +146,7 @@ func DetachMetadata(resourceId int64, resourceName string) (err error) {
 
 	_, err = CheckResponse(resmd, err)
 	if err != nil {
-		return err
+		return errors.New("["+resourceName+"] "+err.Error())
 
 	}
 	glog.Infoln("Metadata  Detached: ", resourceName)
@@ -239,11 +237,7 @@ func OneTimeValidation(poolname string, networkspace string) ( list string , err
 
 		if flag{
 			arrayOfValidnetspaces = append(arrayOfValidnetspaces, name)
-			/*if validList == ""{
-				validList = name
-			}else{
-				validList = validList + "," + name
-			}*/
+
 		}
 	}
 	if len(arrayOfValidnetspaces)>0{
@@ -302,7 +296,7 @@ func GetHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 		}
 		var response interface{}
 		if err := json.Unmarshal(resGet.Body(), &response); err != nil {
-			glog.Info("Error while decoding Json or casting jsondata to record object", err)
+			glog.Error("Error while decoding Json or casting jsondata to record object", err)
 		}
 		var wholeMap map[string]interface{}
 		if response != nil {
@@ -318,6 +312,8 @@ func GetHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 					wholeMap = result.(map[string]interface{})
 					if wholeMap["number_of_objects"].(float64) > 0{
 						hostList=append(hostList,node.Name)
+					}else{
+						glog.Infoln("cluster node is not added on infinibox: ",node.Name)
 					}
 				}
 			}

@@ -74,7 +74,7 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 				for _, hostName := range hostList {
 					hostID, err := getHostId(hostName)
 					if err != nil {
-						glog.Error(err)
+						glog.Error("["+hostName+"] "+err.Error())
 					}
 
 					url := "api/rest/hosts/" + fmt.Sprint(hostID) + "/luns"
@@ -87,7 +87,7 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 							//ignore this error
 							glog.Infoln("mapping alreaded exist for ",hostName)
 						} else {
-							glog.Error("error while mapping pv to hostlist: " + pv.Name + " " + err.Error())
+							glog.Error("error while mapping pv to host " + pv.Name + " to "+hostName+ " : " + err.Error())
 						}
 					}
 				}
@@ -109,7 +109,10 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 
 				if volumeid != "" && len(volumeid) > 0 {
 					volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-					commons.UnMap(hostID,volIDInfloat)
+					err :=commons.UnMap(hostID,volIDInfloat)
+					if err!=nil{
+						glog.Error("Error while unmapping pv from host" + pv.Name + " from "+node.Name+ " : " + err.Error())
+					}
 				}
 
 			}
@@ -129,9 +132,9 @@ func (p *iscsiProvisioner) Provision(options controller.VolumeOptions, config ma
 	}()
 
 	if !util.AccessModesContainedInAll(p.getAccessModes(), options.PVC.Spec.AccessModes) {
-		return nil, fmt.Errorf("invalid AccessModes %v: only AccessModes %v are supported", options.PVC.Spec.AccessModes, p.getAccessModes())
+		return nil, fmt.Errorf("[%v] invalid AccessModes %v: only AccessModes %v are supported", options.PVName,options.PVC.Spec.AccessModes, p.getAccessModes())
 	}
-	glog.Info("new provision request received for pvc: ", options.PVName)
+	glog.Info("New provision request received for pvc: ", options.PVName)
 
 	//override default config with storage class config
 	for key, value := range options.Parameters {
@@ -152,7 +155,7 @@ func (p *iscsiProvisioner) Provision(options controller.VolumeOptions, config ma
 	if err != nil {
 		return nil, err
 	}
-	glog.Info("IQN in the provision method ", iqn)
+
 
 
 	vol, lun, volumeID, err := p.createVolume(options, config, nodeList)
@@ -208,7 +211,7 @@ func getReadOnly(readonly string) bool {
 func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun float64, volumeId float64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while creating volume " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] Error while creating volume " + fmt.Sprint(res))
 		}
 	}()
 
@@ -229,10 +232,10 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 	}
 	defer func() {
 		if res := recover(); res != nil{
-			err = errors.New("error while mapVolumeToHost volume " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] error while mapVolumeToHost volume " + fmt.Sprint(res))
 		}
 		if err!=nil && volumeId != 0 {
-			glog.Infoln("Seemes to be some problem reverting created volume id: ",volumeId)
+			glog.Infoln("["+options.PVName+"] Seemes to be some problem reverting created volume id: ",volumeId)
 			p.volDestroy(int64(volumeId),options.PVName,nodeList)
 		}
 	}()
@@ -244,12 +247,16 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 		return "",0, 0, err
 	}
 
+	if lun == -1 {
+		return "",0,0,errors.New("["+options.PVName+"] volume not mapped to any host")
+	}
+
 	defer func() {
 		if res := recover(); res != nil{
 			err = errors.New("error while AttachMetadata volume " + fmt.Sprint(res))
 		}
 		if err!=nil&&volumeId != 0 {
-			glog.Infoln("Seemes to be some problem reverting mapping volume for id: ",volumeId)
+			glog.Infoln("["+options.PVName+"] Seemes to be some problem reverting mapping volume for id: ",volumeId)
 			for _,hostname := range hostList1{
 				hostid,err:=getHostId(hostname)
 				if err!=nil{
@@ -268,7 +275,7 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 	}
 	defer func() {
 		if res := recover(); res != nil{
-			err = errors.New("error while creating volume " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] error while creating volume " + fmt.Sprint(res))
 		}
 		if err!=nil &&volumeId != 0 {
 			glog.Infoln("Seemes to be some problem reverting created volume id:",volumeId)
@@ -308,7 +315,7 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 	limit, _ := strconv.ParseFloat(config["max_volume"], 64)
 
 	if noOfVolumes >= limit {
-		return 0, errors.New("Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
+		return 0, errors.New("["+options.PVName+"] Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
 	}
 
 	poolId, err := commons.GetPoolID(pool)
@@ -328,7 +335,7 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 
 	resultpostcreate, err := commons.CheckResponse(resCreate, err)
 	if err != nil {
-		glog.Info(err)
+		glog.Error(err)
 	}
 	result := resultpostcreate.(map[string]interface{})
 
@@ -398,7 +405,7 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 func getHostId(name string) (id float64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while getting host id " + fmt.Sprint(res))
+			err = errors.New("["+name+"] error while getting host id " + fmt.Sprint(res))
 		}
 	}()
 

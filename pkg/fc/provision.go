@@ -69,7 +69,7 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 				for _, hostName := range hostList {
 					hostID, err := getHostId(hostName)
 					if err != nil {
-						glog.Error(err)
+						glog.Error(hostName + err.Error() )
 					}
 					url := "api/rest/hosts/" + fmt.Sprint(hostID) + "/luns"
 					restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(map[string]interface{}{
@@ -91,7 +91,7 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 
 		hostID, err := getHostId(node.Name)
 		if err != nil {
-			glog.Error(err)
+			glog.Error(node.Name + err.Error())
 		}
 
 		for _, pv := range pvList {
@@ -115,7 +115,7 @@ func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[s
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while provision volume " + fmt.Sprint(res))
+			err = errors.New(" ["+options.PVName+"]  error while provision volume " + fmt.Sprint(res))
 		}
 	}()
 
@@ -137,7 +137,7 @@ func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[s
 
 	vol, lun, volumeID, err := p.createVolume(options, config, nodeList)
 	if err != nil {
-		glog.Error(err)
+		glog.Error(err )
 		return nil, err
 	}
 	annotations := make(map[string]string)
@@ -182,7 +182,7 @@ func getReadOnly(readonly string) bool {
 func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun int32, volumeId float64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while creating volume " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] error while creating volume " + fmt.Sprint(res))
 		}
 	}()
 
@@ -205,7 +205,7 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	defer func() {
 		if res := recover(); res != nil{
-			err = errors.New("error while mapVolumeToHost volume " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"]  error while mapVolumeToHost volume " + fmt.Sprint(res))
 		}
 		if err!=nil && volumeId != 0 {
 			glog.Infoln("Seemes to be some problem reverting created volume id: ",volumeId)
@@ -218,10 +218,13 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 	if err != nil {
 		return "", 0, 0, err
 	}
+	if lun == -1 {
+		return "",0,0,errors.New("["+options.PVName+"]  volume not mapped to any host")
+	}
 
 	defer func() {
 		if res := recover(); res != nil{
-			err = errors.New("error while AttachMetadata volume " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"]  error while AttachMetadata volume " + fmt.Sprint(res))
 		}
 		if err!=nil&&volumeId != 0 {
 			glog.Infoln("Seemes to be some problem reverting mapping volume for id: ",volumeId)
@@ -244,7 +247,7 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	defer func() {
 		if res := recover(); res != nil{
-			err = errors.New("error while creating volume " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"]  error while creating volume " + fmt.Sprint(res))
 		}
 		if err!=nil &&volumeId != 0 {
 			glog.Infoln("Seemes to be some problem reverting created volume id:",volumeId)
@@ -264,7 +267,7 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while volume create " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"]  error while volume create " + fmt.Sprint(res))
 		}
 	}()
 
@@ -316,7 +319,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err 
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while mapVolumeToHost " + fmt.Sprint(res))
+			err = errors.New("["+ fmt.Sprint(volumeId) +"]  error while mapVolumeToHost " + fmt.Sprint(res))
 		}
 	}()
 
@@ -372,7 +375,7 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 func getHostId(name string) (id float64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while getting host id " + fmt.Sprint(res))
+			err = errors.New("["+name+" ] error while getting host id " + fmt.Sprint(res))
 		}
 	}()
 

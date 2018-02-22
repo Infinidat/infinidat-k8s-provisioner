@@ -50,21 +50,21 @@ func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string
 	}
 	volId, err := strconv.ParseInt(volume.Annotations["volumeId"],10, 64)
 	if err != nil {
-		return err
+		return  errors.New(volume.GetName()+ err.Error())
 	}
 
 
 	//removes metatada about volume from infinibox
 	err = commons.DetachMetadata(volId,volume.GetName())
 	if err != nil {
-		return err
+		return errors.New(volume.GetName()+ err.Error())
 	}
 
 
 	//Unmap volume
 	hostList1, err := commons.GetHostList(nodeList)
 	if err != nil {
-		glog.Error(err)
+		glog.Error(volume.GetName()+ err.Error())
 	}
 	for _, name := range hostList1 {
 		hostid, err := getHostId(name)
@@ -75,14 +75,14 @@ func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string
 		}
 		err = commons.UnMap(hostid, float64(volId))
 		if err != nil {
-				return err
+				return errors.New(volume.GetName()+ err.Error())
 		}
 	}
 
 	//Destroy Volume
 	err = p.volDestroy(volId, volume.Annotations["volume_name"], nodeList)
 	if err != nil {
-		glog.Error(err)
+		glog.Error(volume.GetName() + err.Error())
 		return err
 
 	}
@@ -95,7 +95,7 @@ func (p *iscsiProvisioner) volDestroy(volId int64, vol string, nodeList []*v1.No
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while volume deleting " + fmt.Sprint(res))
+			err = errors.New("["+vol+"] error while volume deleting " + fmt.Sprint(res))
 		}
 	}()
 
@@ -119,7 +119,7 @@ func (p *iscsiProvisioner) volDestroy(volId int64, vol string, nodeList []*v1.No
 func (p *iscsiProvisioner) provisioned(volume *v1.PersistentVolume) (bool, error) {
 	provisionerID, ok := volume.Annotations[annCreatedBy]
 	if !ok {
-		return false, fmt.Errorf("PV doesn't have an annotation %s", annCreatedBy)
+		return false, fmt.Errorf("["+volume.GetName()+"] PV doesn't have an annotation %s", annCreatedBy)
 	}
 
 	return provisionerID == string(createdBy), nil

@@ -184,7 +184,7 @@ type volume struct {
 func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodelist []*v1.Node) (v volume, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while  creating filesystem  " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] error while  creating filesystem  " + fmt.Sprint(res))
 		}
 	}()
 	//override default config with storage class config
@@ -202,7 +202,7 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 
 	v.dirId, err = p.createDirectory(options, config)
 	if err != nil {
-		return v, errors.New("error creating filesystem: " + fmt.Sprint(err))
+		return v, errors.New("["+options.PVName+"] error creating filesystem: " + fmt.Sprint(err))
 	}
 	defer func() {
 		if res := recover(); res != nil{
@@ -220,7 +220,7 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 	}
 	defer func() {
 		if res := recover(); res != nil{
-			err = errors.New("error while AttachMetadata directory " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] error while AttachMetadata directory " + fmt.Sprint(res))
 		}
 		if err!=nil && v.exportID != 0 {
 			glog.Infoln("Seemes to be some problem reverting created export id:", v.exportID)
@@ -230,11 +230,11 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 
 	err = commons.AttachMetadata(int(v.dirId), options, p.kubeVersion,"")
 	if err != nil {
-		return v, errors.New("error attaching metadata: " + fmt.Sprint(err))
+		return v, errors.New("["+options.PVName+"] error attaching metadata: " + fmt.Sprint(err))
 	}
 	defer func() {
 		if res := recover(); res != nil{
-			err = errors.New("error while create directory " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] error while create directory " + fmt.Sprint(res))
 		}
 		if  err!=nil &&v.dirId != 0 {
 			glog.Infoln("Seemes to be some problem reverting attached metadata:", v.dirId)
@@ -245,7 +245,7 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 
 	v.server, err = p.getServer(config)
 	if err != nil {
-		return v, errors.New("error getting NFS server IP for volume: " + fmt.Sprint(err))
+		return v, errors.New("["+options.PVName+"] error getting NFS server IP for volume: " + fmt.Sprint(err))
 	}
 	v.mountOptions = config["nfs_mount_options"]
 	return
@@ -325,7 +325,7 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while  creating filesystem  " + fmt.Sprint(res))
+			err = errors.New("["+options.PVName+"] error while  creating filesystem  " + fmt.Sprint(res))
 		}
 	}()
 
@@ -387,7 +387,7 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 	capacity := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
 	requestBytes := capacity.Value()
 
-	ssdEnabled := config["nfs_ssd_enabled"]
+	ssdEnabled := config["ssd_enabled"]
 	if ssdEnabled == "" {
 		ssdEnabled = fmt.Sprint(true)
 	}
