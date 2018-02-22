@@ -228,7 +228,7 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 	volumeId, err = p.volCreate(vol, pool, config, options)
 	if err != nil {
 		glog.Error(err)
-		return "", 0, 0, errors.New(vol+err.Error())
+		return "", 0, 0, errors.New(vol+" "+err.Error())
 	}
 	defer func() {
 		if res := recover(); res != nil{
