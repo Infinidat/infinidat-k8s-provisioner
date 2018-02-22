@@ -63,7 +63,7 @@ const annDynamicallyProvisioned = "pv.kubernetes.io/provisioned-by"
 const annStorageProvisioner = "volume.beta.kubernetes.io/storage-provisioner"
 
 //config map defined for provisioner related configuration
-const configMapName = "default/provisionerconfig"
+const configMapName = "default/infinidatprovisionerconfig"
 
 
 // ProvisionController is a controller that provisions PersistentVolumes for

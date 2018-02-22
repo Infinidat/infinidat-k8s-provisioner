@@ -438,7 +438,7 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID float64, co
 
 	acess := config["nfs_export_permissions"]
 
-	rootsquash := config["nfs_no_root_squash"]
+	rootsquash := config["no_root_squash"]
 
 	if rootsquash == "" {
 		rootsquash = fmt.Sprint(true)

@@ -323,6 +323,14 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 		return 0, err
 	}
 
+
+	ssdEnabled := config["ssd_enabled"]
+	if ssdEnabled == "" {
+		ssdEnabled = fmt.Sprint(true)
+	}
+
+	ssd, _ := strconv.ParseBool(ssdEnabled)
+
 	capacity := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
 	requestBytes := capacity.Value()
 
@@ -331,6 +339,7 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 		"pool_id":  poolId,
 		"name":     name,
 		"provtype": provtype,
+		"ssd_enabled": ssd,
 		"size":     requestBytes}).Post(urlToCreateVol)
 
 	resultpostcreate, err := commons.CheckResponse(resCreate, err)

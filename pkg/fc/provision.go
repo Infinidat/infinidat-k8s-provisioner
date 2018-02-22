@@ -294,11 +294,19 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 	capacity := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
 	requestBytes := capacity.Value()
 
+	ssdEnabled := config["ssd_enabled"]
+	if ssdEnabled == "" {
+		ssdEnabled = fmt.Sprint(true)
+	}
+
+	ssd, _ := strconv.ParseBool(ssdEnabled)
+
 	urlToCreateVol := "api/rest/volumes"
 	resCreate, err := commons.GetRestClient().R().SetBody(map[string]interface{}{
 		"pool_id":  poolId,
 		"name":     name,
 		"provtype": provtype,
+		"ssd_enabled": ssd,
 		"size":     requestBytes}).Post(urlToCreateVol)
 
 	resultpostcreate, err := commons.CheckResponse(resCreate, err)
