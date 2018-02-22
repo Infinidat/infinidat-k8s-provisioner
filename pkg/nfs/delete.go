@@ -109,7 +109,7 @@ func (p *nfsProvisioner) deleteDirectory(idStr string, config map[string]string)
 func (p *nfsProvisioner) deleteExport(exportid string,block string, config map[string]string) (err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while deleting export " + fmt.Sprint(res))
+			err = errors.New(" ["+ block +" ]error while deleting export " + fmt.Sprint(res))
 		}
 	}()
 
@@ -124,7 +124,7 @@ func (p *nfsProvisioner) deleteExport(exportid string,block string, config map[s
 		if strings.Contains(err.Error(),"EXPORT_NOT_FOUND") 		{ //ignore export not found
 			return nil
 		}else{
-			return err
+			return errors.New(block + err.Error())
 		}
 	}
 	_ = result

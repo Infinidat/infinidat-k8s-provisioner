@@ -42,8 +42,7 @@ func CheckResponse(res *resty.Response, err error) (result interface{}, er error
 	}()
 
 	if res.StatusCode() == http.StatusUnauthorized {
-		glog.Error("Request authentication failed for : " + res.Request.URL)
-		return nil, errors.New(res.Status())
+		return nil, errors.New("Request authentication failed for : " + res.Request.URL)
 	}
 
 	if res.StatusCode() == http.StatusServiceUnavailable{
@@ -51,8 +50,7 @@ func CheckResponse(res *resty.Response, err error) (result interface{}, er error
 	}
 
 	if err != nil {
-		glog.Error("Error While Resty call for request ", res.Request.URL)
-		return nil, err
+		return nil, errors.New("Error While Resty call for request " + res.Request.URL + err.Error())
 	}
 	var response interface{}
 	if er := json.Unmarshal(res.Body(), &response); er != nil {
@@ -124,7 +122,7 @@ func AttachMetadata(resourceId int, options controller.VolumeOptions, kuberVersi
 		Put(urlmd)
 	resulput, err := CheckResponse(resmd, err)
 	if err != nil {
-		return err
+		return errors.New("["+options.PVName+"] "+err.Error())
 
 	}
 	_ = resulput
@@ -148,7 +146,7 @@ func DetachMetadata(resourceId int64, resourceName string) (err error) {
 
 	_, err = CheckResponse(resmd, err)
 	if err != nil {
-		return err
+		return errors.New("["+resourceName+"] "+err.Error())
 
 	}
 	glog.Infoln("Metadata  Detached: ", resourceName)
