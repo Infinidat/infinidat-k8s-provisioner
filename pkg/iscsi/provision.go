@@ -160,7 +160,7 @@ func (p *iscsiProvisioner) Provision(options controller.VolumeOptions, config ma
 
 	vol, lun, volumeID, err := p.createVolume(options, config, nodeList)
 	if err != nil {
-		glog.Error(err)
+		glog.Error(options.PVName +" "+ err.Error())
 		return nil, err
 	}
 	//url,err:=url.Parse(commons.GetRestClient().HostURL)
@@ -344,7 +344,7 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 
 	resultpostcreate, err := commons.CheckResponse(resCreate, err)
 	if err != nil {
-		glog.Error(err)
+		glog.Error(name + " "+ err.Error() )
 	}
 	result := resultpostcreate.(map[string]interface{})
 

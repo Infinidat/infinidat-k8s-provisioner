@@ -137,7 +137,7 @@ func (p *FCProvisioner) Provision(options controller.VolumeOptions, config map[s
 
 	vol, lun, volumeID, err := p.createVolume(options, config, nodeList)
 	if err != nil {
-		glog.Error(err )
+		glog.Error(options.PVName +" "+ err.Error() )
 		return nil, err
 	}
 	annotations := make(map[string]string)
@@ -311,7 +311,7 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 
 	resultpostcreate, err := commons.CheckResponse(resCreate, err)
 	if err != nil {
-		glog.Error(err)
+		glog.Error(name +" "+ err.Error())
 	}
 	result := resultpostcreate.(map[string]interface{})
 
