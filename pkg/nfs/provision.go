@@ -109,6 +109,7 @@ func (p *nfsProvisioner) Provision(options controller.VolumeOptions, config map[
 
 	//validate secret
 	if val, found := os.LookupEnv(commons.Apiusername); !(found && len(val) > 0) {
+
 		return nil, errors.New("management api username not specified in secret")
 	}
 	if val, found := os.LookupEnv(commons.Apiurl); !(found && len(val) > 0) {
@@ -202,7 +203,8 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 
 	v.dirId, err = p.createDirectory(options, config)
 	if err != nil {
-		return v, errors.New("["+options.PVName+"] error creating filesystem: " + fmt.Sprint(err))
+		err =  errors.New("["+options.PVName+"] error creating filesystem: " + fmt.Sprint(err))
+		return v,err
 	}
 	defer func() {
 		if res := recover(); res != nil{
@@ -216,7 +218,8 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 
 	v.exportBlock, v.exportID, err = p.createExport(options.PVName, v.dirId, config, nodelist)
 	if err != nil {
-		return v, errors.New("error creating export for filesystem: " + fmt.Sprint(err))
+		err = errors.New("error creating export for filesystem: " + fmt.Sprint(err))
+		return v, err
 	}
 	defer func() {
 		if res := recover(); res != nil{
@@ -230,7 +233,8 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 
 	err = commons.AttachMetadata(int(v.dirId), options, p.kubeVersion,"")
 	if err != nil {
-		return v, errors.New("["+options.PVName+"] error attaching metadata: " + fmt.Sprint(err))
+		err = errors.New("["+options.PVName+"] error attaching metadata: " + fmt.Sprint(err))
+		return v, err
 	}
 	defer func() {
 		if res := recover(); res != nil{
@@ -245,7 +249,8 @@ func (p *nfsProvisioner) createVolume(options controller.VolumeOptions, config m
 
 	v.server, err = p.getServer(config)
 	if err != nil {
-		return v, errors.New("["+options.PVName+"] error getting NFS server IP for volume: " + fmt.Sprint(err))
+		err = errors.New("["+options.PVName+"] error getting NFS server IP for volume: " + fmt.Sprint(err))
+		return v, err
 	}
 	v.mountOptions = config["nfs_mount_options"]
 	return
@@ -315,7 +320,8 @@ func (p *nfsProvisioner) getServer(config map[string]string) (ip string, err err
 
 	//Return the ip address
 	if resultmapip == nil || resultmapip["ip_address"] == nil {
-		return "", errors.New("No such network space: " + networkSpace)
+		err = errors.New("No such network space: " + networkSpace)
+		return "", err
 	}
 	return resultmapip["ip_address"].(string), nil
 }
@@ -344,7 +350,8 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 
 	var responseget interface{}
 	if err := json.Unmarshal(respo.Body(), &responseget); err != nil {
-		return 0, errors.New("error while decoding Json or casting jsondata to record object" + fmt.Sprint(err))
+		err = errors.New("error while decoding Json or casting jsondata to record object" + fmt.Sprint(err))
+		return 0, err
 	}
 
 	var wholemap map[string]interface{}
@@ -354,27 +361,32 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 		if responseinmap != nil {
 			//Check error
 			if str, iserr := commons.ParseError(responseinmap["error"]); iserr {
-				return 0, errors.New(str)
+				err = errors.New(str)
+				return 0, err
 			}
 			result := responseinmap["metadata"]
 			if result != nil {
 				wholemap = result.(map[string]interface{})
 			} else {
-				return 0, errors.New(responseinmap["metadata"].(string))
+				err = errors.New(responseinmap["metadata"].(string))
+				return 0, err
 			}
 
 		} else {
-			return 0, errors.New("empty response in Get filesystem ")
+			err =  errors.New("empty response in Get filesystem ")
+			return 0, err
 		}
 	} else {
-		return 0, errors.New("empty response in Get filesystem ")
+		err = errors.New("empty response in Get filesystem ")
+		return 0, err
 	}
 
 	var limit, _ = strconv.ParseFloat(config["max_fs"], 64)
 
 	//Checking the maximum no. of filesystems limit
 	if wholemap["number_of_objects"].(float64) > limit {
-		return 0, errors.New("reached maximum no. of filesystems, allowed limit is" + fmt.Sprint(limit))
+		err =  errors.New("reached maximum no. of filesystems, allowed limit is" + fmt.Sprint(limit))
+		return 0, err
 	}
 
 	var namepool = config["pool_name"]
@@ -483,7 +495,8 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID float64, co
 		block = fmt.Sprint(wholemap["export_path"])
 		exportID = uint16(wholemap["id"].(float64))
 	} else {
-		return "", 0, errors.New("Empty result after post ")
+		err = errors.New("Empty result after post ")
+		return "", 0, err
 	}
 
 	glog.Infoln("Export Created: ", block)

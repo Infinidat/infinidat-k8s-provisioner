@@ -196,7 +196,8 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	volumeId, err = p.volCreate(vol, pool, config,options)
 	if err != nil {
-		return "", 0, 0, errors.New(vol+" "+err.Error())
+		err = errors.New(vol+" "+err.Error())
+		return "", 0, 0, err
 	}
 	glog.Info("Volume created: ", vol)
 
@@ -216,7 +217,8 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 		return "", 0, 0, err
 	}
 	if lun == -1 {
-		return "",0,0,errors.New("["+options.PVName+"]  volume not mapped to any host")
+		err = errors.New("["+options.PVName+"]  volume not mapped to any host")
+		return "",0,0, err
 	}
 
 	defer func() {
@@ -280,7 +282,8 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 	limit, _ := strconv.ParseFloat(config["max_volume"], 64)
 
 	if noOfVolumes >= limit {
-		return 0, errors.New("Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
+		err =  errors.New("Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
+		return 0, err
 	}
 
 	poolId, err := commons.GetPoolID(pool)
@@ -422,19 +425,23 @@ func getNumberOfVolumes() (no float64, err error) {
 		if responseInMap != nil {
 
 			if str, iserr := commons.ParseError(responseInMap["error"]); iserr {
-				return 0, errors.New(str)
+				err = errors.New(str)
+				return 0, err
 			}
 			result := responseInMap["metadata"]
 			if result != nil {
 				wholeMap = result.(map[string]interface{})
 			} else {
-				return 0, errors.New(responseInMap["metadata"].(string))
+				err = errors.New(responseInMap["metadata"].(string))
+				return 0, err
 			}
 		} else {
-			return 0, errors.New("Empty response in Get NumberofVolumes ")
+			err = errors.New("Empty response in Get NumberofVolumes ")
+			return 0, err
 		}
 	} else {
-		return 0, errors.New("empty response while getting numberofvolumes ")
+		err = errors.New("empty response while getting numberofvolumes ")
+		return 0, err
 	}
 	return wholeMap["number_of_objects"].(float64), nil
 }

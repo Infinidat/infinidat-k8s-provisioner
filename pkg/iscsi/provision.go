@@ -226,7 +226,8 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 
 	volumeId, err = p.volCreate(vol, pool, config, options)
 	if err != nil {
-		return "", 0, 0, errors.New(vol+" "+err.Error())
+		err = errors.New(vol+" "+err.Error())
+		return "", 0, 0, err
 	}
 	defer func() {
 		if res := recover(); res != nil{
@@ -246,7 +247,8 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 	}
 
 	if lun == -1 {
-		return "",0,0,errors.New("["+options.PVName+"] volume not mapped to any host")
+		err = errors.New("["+options.PVName+"] volume not mapped to any host")
+		return "",0,0,err
 	}
 
 	defer func() {
@@ -313,7 +315,8 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 	limit, _ := strconv.ParseFloat(config["max_volume"], 64)
 
 	if noOfVolumes >= limit {
-		return 0, errors.New("["+options.PVName+"] Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
+		err = errors.New("["+options.PVName+"] Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
+		return 0, err
 	}
 
 	poolId, err := commons.GetPoolID(pool)
@@ -356,7 +359,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, er
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while mapVolumeToHost " + fmt.Sprint(res))
+			err = errors.New("error while mapping Volume To Host " + fmt.Sprint(res))
 		}
 	}()
 
@@ -454,19 +457,23 @@ func getNumberOfVolumes() (no float64, err error) {
 		if responseInMap != nil {
 
 			if str, iserr := commons.ParseError(responseInMap["error"]); iserr {
-				return 0, errors.New(str)
+				err = errors.New(str)
+				return 0,err
 			}
 			result := responseInMap["metadata"]
 			if result != nil {
 				wholeMap = result.(map[string]interface{})
 			} else {
-				return 0, errors.New(responseInMap["metadata"].(string))
+				err = errors.New(responseInMap["metadata"].(string))
+				return 0, err
 			}
 		} else {
-			return 0, errors.New("Empty response in Get NumberofVolumes ")
+			err =errors.New("Empty response in Get NumberofVolumes ")
+			return 0, err
 		}
 	} else {
-		return 0, errors.New("empty response while getting numberofvolumes ")
+		err = errors.New("empty response while getting numberofvolumes ")
+		return 0, err
 	}
 	return wholeMap["number_of_objects"].(float64), nil
 }
@@ -518,7 +525,8 @@ func (p *iscsiProvisioner) getIPndIQNForNetworkSpace(networkSpaces string) (iqnn
 
 
 	if name == "" {
-		return "",ipList, errors.New("provided empty networkspace name ")
+		err = errors.New("provided empty networkspace name ")
+		return "",ipList,err
 	}
 
 	iqn , err = getTargetIQN(name)

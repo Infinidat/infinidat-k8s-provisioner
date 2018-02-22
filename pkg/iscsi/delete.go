@@ -46,18 +46,21 @@ func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string
 	glog.Info("volume deletion request received: ", volume.GetName())
 
 	if volume.Annotations["volumeId"] == "" {
-		return errors.New("volumeid is empty")
+		err = errors.New("volumeid is empty")
+		return err
 	}
 	volId, err := strconv.ParseInt(volume.Annotations["volumeId"],10, 64)
 	if err != nil {
-		return  errors.New(volume.GetName()+ err.Error())
+		err = errors.New(volume.GetName()+ err.Error())
+		return  err
 	}
 
 
 	//removes metatada about volume from infinibox
 	err = commons.DetachMetadata(volId,volume.GetName())
 	if err != nil {
-		return errors.New(volume.GetName()+ err.Error())
+		err = errors.New(volume.GetName()+ err.Error())
+		return err
 	}
 
 
@@ -75,7 +78,8 @@ func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string
 		}
 		err = commons.UnMap(hostid, float64(volId))
 		if err != nil {
-				return errors.New(volume.GetName()+ err.Error())
+			err = errors.New(volume.GetName()+ err.Error())
+				return err
 		}
 	}
 
@@ -108,7 +112,8 @@ func (p *iscsiProvisioner) volDestroy(volId int64, vol string, nodeList []*v1.No
 	}
 
 	if resultdelvolumes == nil {
-		return errors.New("Result field empty in volDestroy ")
+		err = errors.New("Result field empty in volDestroy ")
+		return err
 	}
 
 	return nil
