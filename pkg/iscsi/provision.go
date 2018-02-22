@@ -230,9 +230,13 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 		return "", 0, 0, err
 	}
 	defer func() {
+		glog.Info("recover " ,recover())
 		if res := recover(); res != nil{
 			err = errors.New("["+options.PVName+"] error while mapVolumeToHost volume " + fmt.Sprint(res))
 		}
+
+		glog.Info("err!=nil ",err!=nil,"volumeId ",volumeId )
+
 		if err!=nil && volumeId != 0 {
 			glog.Infoln("["+options.PVName+"] Seemes to be some problem reverting created volume id: ",volumeId)
 			p.volDestroy(int64(volumeId),options.PVName,nodeList)
