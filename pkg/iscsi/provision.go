@@ -229,6 +229,8 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 		err = errors.New(vol+" "+err.Error())
 		return "", 0, 0, err
 	}
+
+	glog.Info("Volume Id " , volumeId)
 	defer func() {
 		glog.Info("recover " ,recover())
 		if res := recover(); res != nil{
@@ -237,7 +239,7 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 
 		glog.Info("err!=nil ",err!=nil,"volumeId ",volumeId )
 
-		if err!=nil && volumeId != 0 {
+		if err!=nil  {
 			glog.Infoln("["+options.PVName+"] Seemes to be some problem reverting created volume id: ",volumeId)
 			p.volDestroy(int64(volumeId),options.PVName,nodeList)
 		}
@@ -354,6 +356,8 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 	result := resultpostcreate.(map[string]interface{})
 
 	volumeId = result["id"].(float64)
+
+	glog.Info("volumeId in the volCreate ",volumeId)
 
 	return  volumeId, nil
 }
