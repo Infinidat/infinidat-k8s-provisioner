@@ -124,7 +124,8 @@ func (p *nfsProvisioner) deleteExport(exportid string,block string, config map[s
 		if strings.Contains(err.Error(),"EXPORT_NOT_FOUND") 		{ //ignore export not found
 			return nil
 		}else{
-			return errors.New(block + err.Error())
+			err = errors.New(block + err.Error())
+			return err
 		}
 	}
 	_ = result

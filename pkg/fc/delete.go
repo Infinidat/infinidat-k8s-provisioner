@@ -43,7 +43,8 @@ func (p *FCProvisioner) Delete(volume *v1.PersistentVolume, config map[string]st
 	glog.Info("volume deletion request received: ", volume.GetName())
 
 	if volume.Annotations["volumeId"] == "" {
-		return errors.New("volumeid is empty")
+		err = errors.New("volumeid is empty")
+		return err
 	}
 	volId, err := strconv.ParseFloat(volume.Annotations["volumeId"], 64)
 	if err != nil {
@@ -98,7 +99,8 @@ func (p *FCProvisioner) volDestroy(volId float64, vol string, nodeList []*v1.Nod
 	}
 
 	if resultdelvolumes == nil {
-		return errors.New("Result field empty in volDestroy ")
+		err = errors.New("Result field empty in volDestroy ")
+		return err
 	}
 
 	return nil

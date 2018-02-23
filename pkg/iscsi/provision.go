@@ -160,7 +160,6 @@ func (p *iscsiProvisioner) Provision(options controller.VolumeOptions, config ma
 
 	vol, lun, volumeID, err := p.createVolume(options, config, nodeList)
 	if err != nil {
-		glog.Error(err)
 		return nil, err
 	}
 	//url,err:=url.Parse(commons.GetRestClient().HostURL)
@@ -222,19 +221,25 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 	hostList1, err := commons.GetHostList(nodeList)
 	if err != nil {
 		glog.Error(err)
-		return "", 0, 0, err
+		return vol, lun, volumeId, err
 	}
 
 	volumeId, err = p.volCreate(vol, pool, config, options)
 	if err != nil {
-		glog.Error(err)
-		return "", 0, 0, err
+		err = errors.New(vol+" "+err.Error())
+		return vol, lun, volumeId, err
 	}
+
+	glog.Info("Volume Id " , volumeId)
 	defer func() {
+
 		if res := recover(); res != nil{
 			err = errors.New("["+options.PVName+"] error while mapVolumeToHost volume " + fmt.Sprint(res))
 		}
-		if err!=nil && volumeId != 0 {
+
+
+
+		if err!=nil && volumeId != 0{
 			glog.Infoln("["+options.PVName+"] Seemes to be some problem reverting created volume id: ",volumeId)
 			p.volDestroy(int64(volumeId),options.PVName,nodeList)
 		}
@@ -244,18 +249,19 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 
 	lun , err = mapVolumeToHost(hostList1, volumeId)
 	if err != nil {
-		return "",0, 0, err
+		return vol,lun, volumeId, err
 	}
 
 	if lun == -1 {
-		return "",0,0,errors.New("["+options.PVName+"] volume not mapped to any host")
+		err = errors.New("["+options.PVName+"] volume not mapped to any host")
+		return vol,lun,volumeId,err
 	}
 
 	defer func() {
 		if res := recover(); res != nil{
 			err = errors.New("error while AttachMetadata volume " + fmt.Sprint(res))
 		}
-		if err!=nil&&volumeId != 0 {
+		if err!=nil && volumeId != 0 {
 			glog.Infoln("["+options.PVName+"] Seemes to be some problem reverting mapping volume for id: ",volumeId)
 			for _,hostname := range hostList1{
 				hostid,err:=getHostId(hostname)
@@ -271,7 +277,7 @@ func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config
 
 	err = commons.AttachMetadata(int(volumeId), options, p.kubeVersion,config["fsType"])
 	if err != nil {
-		return "",0, 0, err
+		return vol,lun, volumeId, err
 	}
 	defer func() {
 		if res := recover(); res != nil{
@@ -315,13 +321,22 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 	limit, _ := strconv.ParseFloat(config["max_volume"], 64)
 
 	if noOfVolumes >= limit {
-		return 0, errors.New("["+options.PVName+"] Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
+		err = errors.New("["+options.PVName+"] Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
+		return 0, err
 	}
 
 	poolId, err := commons.GetPoolID(pool)
 	if err != nil {
 		return 0, err
 	}
+
+
+	ssdEnabled := config["ssd_enabled"]
+	if ssdEnabled == "" {
+		ssdEnabled = fmt.Sprint(true)
+	}
+
+	ssd, _ := strconv.ParseBool(ssdEnabled)
 
 	capacity := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
 	requestBytes := capacity.Value()
@@ -331,11 +346,12 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 		"pool_id":  poolId,
 		"name":     name,
 		"provtype": provtype,
+		"ssd_enabled": ssd,
 		"size":     requestBytes}).Post(urlToCreateVol)
 
 	resultpostcreate, err := commons.CheckResponse(resCreate, err)
 	if err != nil {
-		glog.Error(err)
+		glog.Error(name + " "+ err.Error() )
 	}
 	result := resultpostcreate.(map[string]interface{})
 
@@ -349,7 +365,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, er
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
-			err = errors.New("error while mapVolumeToHost " + fmt.Sprint(res))
+			err = errors.New("error while mapping Volume To Host " + fmt.Sprint(res))
 		}
 	}()
 
@@ -359,7 +375,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, er
 		id, _ := getHostId(hostName)
 		newLunNo, err := mapping(id, volumeId,lunNo)
 		if err != nil {
-			return 0, err
+			return lunNo, err
 		}
 		if newLunNo > lunNo {
 			//because we want same lun number to all host for single volume
@@ -395,7 +411,7 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 		if strings.Contains(err.Error(), "MAPPING_ALREADY_EXISTS") {
 			//ignore
 		} else {
-			return 0, err
+			return lunno, err
 		}
 	}
 	lunofVolume := resultPost.(map[string]interface{})
@@ -413,7 +429,7 @@ func getHostId(name string) (id float64, err error) {
 	resGet, err := commons.GetRestClient().R().SetQueryString("name=" + name).Get(urlGetHostId)
 	resultGet, err := commons.CheckResponse(resGet, err)
 	if err != nil {
-		return 0, err
+		return id, err
 	}
 
 	arrayOfResult := resultGet.([]interface{})
@@ -433,7 +449,7 @@ func getNumberOfVolumes() (no float64, err error) {
 
 	resGet, err := commons.GetRestClient().R().Get(urlGet)
 	if err != nil {
-		return 0, err
+		return no, err
 	}
 
 	var response interface{}
@@ -447,19 +463,23 @@ func getNumberOfVolumes() (no float64, err error) {
 		if responseInMap != nil {
 
 			if str, iserr := commons.ParseError(responseInMap["error"]); iserr {
-				return 0, errors.New(str)
+				err = errors.New(str)
+				return no,err
 			}
 			result := responseInMap["metadata"]
 			if result != nil {
 				wholeMap = result.(map[string]interface{})
 			} else {
-				return 0, errors.New(responseInMap["metadata"].(string))
+				err = errors.New(responseInMap["metadata"].(string))
+				return no, err
 			}
 		} else {
-			return 0, errors.New("Empty response in Get NumberofVolumes ")
+			err =errors.New("Empty response in Get NumberofVolumes ")
+			return no, err
 		}
 	} else {
-		return 0, errors.New("empty response while getting numberofvolumes ")
+		err = errors.New("empty response while getting numberofvolumes ")
+		return no, err
 	}
 	return wholeMap["number_of_objects"].(float64), nil
 }
@@ -511,18 +531,19 @@ func (p *iscsiProvisioner) getIPndIQNForNetworkSpace(networkSpaces string) (iqnn
 
 
 	if name == "" {
-		return "",ipList, errors.New("provided empty networkspace name ")
+		err = errors.New("provided empty networkspace name ")
+		return iqnno,ipList,err
 	}
 
 	iqn , err = getTargetIQN(name)
 	if err!=nil{
-		return "",ipList,err
+		return iqnno,ipList,err
 	}
 
 	response, err := commons.GetRestClient().R().SetQueryString("name=" + name).Get(url)
 	result, err := commons.CheckResponse(response, err)
 	if err != nil {
-		return "" , ipList, err
+		return iqnno , ipList, err
 	}
 	arrayOfResult := result.([]interface{})
 	firstIndex := arrayOfResult[0].(map[string]interface{})
