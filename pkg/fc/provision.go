@@ -191,13 +191,13 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	hostList1, err := commons.GetHostList(nodeList)
 	if err != nil {
-		return "", 0, 0, err
+		return vol, lun, volumeId, err
 	}
 
 	volumeId, err = p.volCreate(vol, pool, config,options)
 	if err != nil {
 		err = errors.New(vol+" "+err.Error())
-		return "", 0, 0, err
+		return vol, lun, volumeId, err
 	}
 	glog.Info("Volume created: ", vol)
 
@@ -214,11 +214,11 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	lun, err = mapVolumeToHost(hostList1, volumeId)
 	if err != nil {
-		return "", 0, 0, err
+		return vol, lun, volumeId, err
 	}
 	if lun == -1 {
 		err = errors.New("["+options.PVName+"]  volume not mapped to any host")
-		return "",0,0, err
+		return vol, lun, volumeId, err
 	}
 
 	defer func() {
@@ -241,7 +241,7 @@ func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config ma
 
 	err = commons.AttachMetadata(int(volumeId), options, p.kubeVersion,config["fsType"])
 	if err != nil {
-		return "", 0, 0, err
+		return vol, lun, volumeId, err
 	}
 
 	defer func() {
@@ -283,12 +283,12 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 
 	if noOfVolumes >= limit {
 		err =  errors.New("Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
-		return 0, err
+		return volid, err
 	}
 
 	poolId, err := commons.GetPoolID(pool)
 	if err != nil {
-		return 0, err
+		return volid, err
 	}
 
 	capacity := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
@@ -371,7 +371,7 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 		if strings.Contains(err.Error(), "MAPPING_ALREADY_EXISTS") {
 			//ignore this error
 		} else {
-			return 0, err
+			return lunno, err
 		}
 	}
 	lunofVolume := resultPost.(map[string]interface{})
@@ -411,7 +411,7 @@ func getNumberOfVolumes() (no float64, err error) {
 
 	resGet, err := commons.GetRestClient().R().Get(urlGet)
 	if err != nil {
-		return 0, err
+		return no, err
 	}
 
 	var response interface{}
@@ -426,22 +426,22 @@ func getNumberOfVolumes() (no float64, err error) {
 
 			if str, iserr := commons.ParseError(responseInMap["error"]); iserr {
 				err = errors.New(str)
-				return 0, err
+				return no, err
 			}
 			result := responseInMap["metadata"]
 			if result != nil {
 				wholeMap = result.(map[string]interface{})
 			} else {
 				err = errors.New(responseInMap["metadata"].(string))
-				return 0, err
+				return no, err
 			}
 		} else {
 			err = errors.New("Empty response in Get NumberofVolumes ")
-			return 0, err
+			return no, err
 		}
 	} else {
 		err = errors.New("empty response while getting numberofvolumes ")
-		return 0, err
+		return no, err
 	}
 	return wholeMap["number_of_objects"].(float64), nil
 }
