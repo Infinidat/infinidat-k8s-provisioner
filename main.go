@@ -6,8 +6,6 @@ import (
 	"infinidat-k8s-provisioner/pkg/nfs"
 	"flag"
 	"github.com/golang/glog"
-	//"k8s.io/apimachinery/pkg/util/validation"
-	//"k8s.io/apimachinery/pkg/util/validation/field"
 	"infinidat-k8s-provisioner/pkg/fc"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -87,18 +85,3 @@ func main() {
 	var neverStop <-chan struct{} = make(chan struct{})
 	pc.Run(neverStop)
 }
-
-// validateProvisioner tests if provisioner is a valid qualified name.
-// https://github.com/kubernetes/kubernetes/blob/release-1.4/pkg/apis/storage/validation/validation.go
-/*func validateProvisioner(provisioner string, fldPath *field.Path) field.ErrorList {
-	allErrs := field.ErrorList{}
-	if len(provisioner) == 0 {
-		allErrs = append(allErrs, field.Required(fldPath, provisioner))
-	}
-	if len(provisioner) > 0 {
-		for _, msg := range validation.IsQualifiedName(strings.ToLower(provisioner)) {
-			allErrs = append(allErrs, field.Invalid(fldPath, provisioner, msg))
-		}
-	}
-	return allErrs
-}*/
