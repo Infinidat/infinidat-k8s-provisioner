@@ -155,7 +155,7 @@ func DetachMetadata(resourceId int64, resourceName string) (err error) {
 }
 
 //Returns poolId of provided pool name
-func GetPoolID(name string) (id float64, err error) {
+func GetPoolID(name string) (id int64, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -164,7 +164,7 @@ func GetPoolID(name string) (id float64, err error) {
 	}()
 
 	//To get the pool_id for corresponding poolname
-	var poolId float64 = -1
+	var poolId int64 = -1
 	urlpool := "api/rest/pools"
 
 	respool, err := GetRestClient().R().SetQueryString("name=" + name).
@@ -179,7 +179,7 @@ func GetPoolID(name string) (id float64, err error) {
 	for _, result := range arryofresult {
 		resultmap := result.(map[string]interface{})
 		if resultmap["name"] == name {
-			poolId = resultmap["id"].(float64)
+			poolId = int64(resultmap["id"].(float64))
 		}
 	}
 
@@ -310,7 +310,7 @@ func GetHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 				result := responseInMap["metadata"]
 				if result != nil {
 					wholeMap = result.(map[string]interface{})
-					if wholeMap["number_of_objects"].(float64) > 0{
+					if int64(wholeMap["number_of_objects"].(float64)) > 0{
 						hostList=append(hostList,node.Name)
 					}else{
 						glog.Infoln("cluster node is not added on infinibox: ",node.Name)
@@ -323,7 +323,7 @@ func GetHostList(k8sNodeList []*v1.Node) (list []string, err error) {
 	return hostList, nil
 }
 
-func UnMap(hostId float64, volId float64) (err error) {
+func UnMap(hostId int64, volId int64) (err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while unmap volume " + fmt.Sprint(res))

@@ -171,12 +171,12 @@ type volume struct {
 	server       string
 	path         string
 	exportBlock  string
-	exportID     uint16
+	exportID     int64
 	projectBlock string
 	projectID    uint16
 	supGroup     uint64
 	mountOptions string
-	dirId        float64
+	dirId        int64
 }
 
 // createVolume creates a volume i.e. the storage asset. It creates a unique
@@ -327,7 +327,7 @@ func (p *nfsProvisioner) getServer(config map[string]string) (ip string, err err
 }
 
 // createDirectory creates the given directory in exportDir with appropriate
-func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, config map[string]string) (id float64, err error) {
+func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, config map[string]string) (id int64, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -340,7 +340,7 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 	//api url to the inifinibox
 	urlGet := "api/rest/filesystems"
 
-	var poolID float64 = -1
+	var poolID int64 = -1
 	respo, err := commons.GetRestClient().R().
 		Get(urlGet)
 
@@ -381,10 +381,10 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 		return 0, err
 	}
 
-	var limit, _ = strconv.ParseFloat(config["max_fs"], 64)
+	var limit, _ = strconv.ParseInt(config["max_fs"], 10 , 64)
 
 	//Checking the maximum no. of filesystems limit
-	if wholemap["number_of_objects"].(float64) > limit {
+	if int64(wholemap["number_of_objects"].(float64)) > limit {
 		err =  errors.New("reached maximum no. of filesystems, allowed limit is" + fmt.Sprint(limit))
 		return 0, err
 	}
@@ -415,7 +415,7 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 			"size":        requestBytes}).
 		Post(urlGet)
 
-	var filesystemId float64
+	var filesystemId int64
 	var filesystemName string
 	resultPostCreate, err := commons.CheckResponse(rescreate, err)
 	if err != nil {
@@ -425,7 +425,7 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 
 	if resultPostCreate != nil {
 		wholemap := resultPostCreate.(map[string]interface{})
-		filesystemId = wholemap["id"].(float64)
+		filesystemId = int64(wholemap["id"].(float64))
 		filesystemName = fmt.Sprint(wholemap["name"])
 	}
 	glog.Infoln("Created file system: ", filesystemName)
@@ -434,7 +434,7 @@ func (p *nfsProvisioner) createDirectory(options controller.VolumeOptions, confi
 
 // createExport creates the export by adding a block to the appropriate config
 // file and exporting it
-func (p *nfsProvisioner) createExport(directory string, FilesystemID float64, config map[string]string, nodelist []*v1.Node) (name string, id uint16, err error) {
+func (p *nfsProvisioner) createExport(directory string, FilesystemID int64, config map[string]string, nodelist []*v1.Node) (name string, id int64, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -443,7 +443,7 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID float64, co
 	}()
 
 	var block string
-	var exportID uint16
+	var exportID int64
 
 	//This will create the export for provided filesystem
 	exportpath := path.Join(p.exportDir, directory)
@@ -493,7 +493,7 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID float64, co
 	if resultpost != nil {
 		wholemap := resultpost.(map[string]interface{})
 		block = fmt.Sprint(wholemap["export_path"])
-		exportID = uint16(wholemap["id"].(float64))
+		exportID = int64(wholemap["id"].(float64))
 	} else {
 		err = errors.New("Empty result after post ")
 		return "", 0, err

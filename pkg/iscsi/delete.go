@@ -76,7 +76,7 @@ func (p *iscsiProvisioner) Delete(volume *v1.PersistentVolume, config map[string
 			//it should not return hence printing it.
 			glog.Error(hostid)
 		}
-		err = commons.UnMap(hostid, float64(volId))
+		err = commons.UnMap(hostid, volId)
 		if err != nil {
 			err = errors.New(volume.GetName()+ err.Error())
 				return err
