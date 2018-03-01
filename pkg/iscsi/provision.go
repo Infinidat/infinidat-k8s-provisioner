@@ -68,9 +68,15 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 			ann := pv.ObjectMeta.Annotations
 			volumeid := ann["volumeId"]
 			lun:= ann["lun"]
-			lunNumber, _ := strconv.ParseFloat(lun, 64)
+			lunNumber, err := strconv.ParseInt(lun, 10,32)
+			if err != nil{
+				glog.Error(err)
+			}
 			if volumeid != "" && len(volumeid) > 0 {
-				volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
+				volIDInint, err := strconv.ParseInt(volumeid, 10 ,64)
+				if err != nil{
+					glog.Error(err)
+				}
 				for _, hostName := range hostList {
 					hostID, err := getHostId(hostName)
 					if err != nil {
@@ -79,7 +85,7 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 
 					url := "api/rest/hosts/" + fmt.Sprint(hostID) + "/luns"
 					restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(map[string]interface{}{
-						"volume_id": volIDInfloat,"lun":lunNumber}).Post(url)
+						"volume_id": volIDInint,"lun":lunNumber}).Post(url)
 
 					_, err = commons.CheckResponse(restPost, err)
 					if err != nil {
@@ -108,8 +114,11 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 				volumeid := ann["volumeId"]
 
 				if volumeid != "" && len(volumeid) > 0 {
-					volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-					err :=commons.UnMap(hostID,volIDInfloat)
+					volIDInint, err := strconv.ParseInt(volumeid, 10 ,64)
+					if err != nil{
+						glog.Error(err)
+					}
+					err =commons.UnMap(hostID,volIDInint)
 					if err!=nil{
 						glog.Error("Error while unmapping pv from host" + pv.Name + " from "+node.Name+ " : " + err.Error())
 					}
@@ -189,7 +198,7 @@ func (p *iscsiProvisioner) Provision(options controller.VolumeOptions, config ma
 					Portals:        IPList,
 					IQN:            iqn,
 					ISCSIInterface: "default",
-					Lun:            int32(lun),
+					Lun:            lun,
 					ReadOnly:       getReadOnly(config["readonly"]),
 					FSType:         config["fsType"],
 				},
@@ -207,7 +216,7 @@ func getReadOnly(readonly string) bool {
 	return isReadOnly
 }
 
-func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun float64, volumeId float64, err error) {
+func (p *iscsiProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun int32, volumeId int64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("["+options.PVName+"] Error while creating volume " + fmt.Sprint(res))
@@ -301,7 +310,7 @@ func (p *iscsiProvisioner) getVolumeName(options controller.VolumeOptions) strin
 }
 
 // volCreate calls vol_create targetd API to create a volume.
-func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string]string, options controller.VolumeOptions) (volid float64, err error) {
+func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string]string, options controller.VolumeOptions) (volid int64, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -311,14 +320,17 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 
 	//To Create volume provided by above parameters
 	provtype := config["provision_type"]
-	var volumeId float64
+	var volumeId int64
 	noOfVolumes, err := getNumberOfVolumes()
 	if err != nil {
 		glog.Errorf(fmt.Sprint(err))
 	}
 
 
-	limit, _ := strconv.ParseFloat(config["max_volume"], 64)
+	limit, err := strconv.ParseInt(config["max_volume"], 10 , 64)
+	if err != nil {
+		glog.Error(err)
+	}
 
 	if noOfVolumes >= limit {
 		err = errors.New("["+options.PVName+"] Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
@@ -355,13 +367,13 @@ func (p *iscsiProvisioner) volCreate(name string, pool string, config map[string
 	}
 	result := resultpostcreate.(map[string]interface{})
 
-	volumeId = result["id"].(float64)
+	volumeId = int64(result["id"].(float64))
 
-	return  volumeId, nil
+	return  volumeId , nil
 }
 
 //Map recently created volume with all host mentioned in export list
-func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, err error) {
+func mapVolumeToHost(arrayOfHosts []string, volumeId int64) (lunNo int32, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -388,7 +400,7 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo float64, er
 }
 
 //Maps the volume to the host passed by calling function
-func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err error) {
+func mapping(hostId int64, volumeId int64 ,lunNo int32) (lunno int32, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while mapping volume to host " + fmt.Sprint(res))
@@ -415,10 +427,10 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 		}
 	}
 	lunofVolume := resultPost.(map[string]interface{})
-	return lunofVolume["lun"].(float64), nil
+	return int32(lunofVolume["lun"].(float64)) , nil
 }
 
-func getHostId(name string) (id float64, err error) {
+func getHostId(name string) (id int64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("["+name+"] error while getting host id " + fmt.Sprint(res))
@@ -435,10 +447,10 @@ func getHostId(name string) (id float64, err error) {
 	arrayOfResult := resultGet.([]interface{})
 	resultMap := arrayOfResult[0].(map[string]interface{})
 
-	return resultMap["id"].(float64), nil
+	return int64(resultMap["id"].(float64)), nil
 }
 
-func getNumberOfVolumes() (no float64, err error) {
+func getNumberOfVolumes() (no int64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while getting number of volumes " + fmt.Sprint(res))
@@ -481,7 +493,7 @@ func getNumberOfVolumes() (no float64, err error) {
 		err = errors.New("empty response while getting numberofvolumes ")
 		return no, err
 	}
-	return wholeMap["number_of_objects"].(float64), nil
+	return int64(wholeMap["number_of_objects"].(float64)), nil
 }
 
 

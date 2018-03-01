@@ -46,7 +46,7 @@ func (p *FCProvisioner) Delete(volume *v1.PersistentVolume, config map[string]st
 		err = errors.New("volumeid is empty")
 		return err
 	}
-	volId, err := strconv.ParseFloat(volume.Annotations["volumeId"], 64)
+	volId, err := strconv.ParseInt(volume.Annotations["volumeId"], 10, 64)
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func (p *FCProvisioner) Delete(volume *v1.PersistentVolume, config map[string]st
 }
 
 // deletes volume
-func (p *FCProvisioner) volDestroy(volId float64, vol string, nodeList []*v1.Node) (err error) {
+func (p *FCProvisioner) volDestroy(volId int64, vol string, nodeList []*v1.Node) (err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {

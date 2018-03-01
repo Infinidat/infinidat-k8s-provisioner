@@ -64,8 +64,14 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 			volumeid := ann["volumeId"]
 			lun:= ann["lun"]
 			if volumeid != "" && len(volumeid) > 0 {
-				volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-				lunNumber, _ := strconv.ParseFloat(lun, 64)
+				volIDInint, err := strconv.ParseInt(volumeid, 10 , 64)
+				if err != nil{
+					glog.Error(err)
+				}
+				lunNumber, err := strconv.ParseInt(lun, 10, 32)
+				if err != nil{
+					glog.Error(err)
+				}
 				for _, hostName := range hostList {
 					hostID, err := getHostId(hostName)
 					if err != nil {
@@ -73,7 +79,7 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 					}
 					url := "api/rest/hosts/" + fmt.Sprint(hostID) + "/luns"
 					restPost, err := commons.GetRestClient().R().SetQueryString("approved=true").SetBody(map[string]interface{}{
-						"volume_id": volIDInfloat,"lun":lunNumber}).Post(url)
+						"volume_id": volIDInint,"lun":lunNumber}).Post(url)
 
 					_, err = commons.CheckResponse(restPost, err)
 					if err != nil {
@@ -99,8 +105,11 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 				ann := pv.ObjectMeta.Annotations
 				volumeid := ann["volumeId"]
 				if volumeid != "" && len(volumeid) > 0 {
-					volIDInfloat, _ := strconv.ParseFloat(volumeid, 64)
-					commons.UnMap(hostID,volIDInfloat)
+					volIDInint, err := strconv.ParseInt(volumeid, 10, 64)
+					if err != nil{
+						glog.Error(err)
+					}
+					commons.UnMap(hostID,volIDInint)
 				}
 
 			}
@@ -178,7 +187,7 @@ func getReadOnly(readonly string) bool {
 	return isReadOnly
 }
 
-func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun int32, volumeId float64, err error) {
+func (p *FCProvisioner) createVolume(options controller.VolumeOptions, config map[string]string, nodeList []*v1.Node) (vol string, lun int32, volumeId int64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("["+options.PVName+"] error while creating volume " + fmt.Sprint(res))
@@ -262,7 +271,7 @@ func (p *FCProvisioner) getVolumeName(options controller.VolumeOptions) string {
 }
 
 // volCreate calls vol_create targetd API to create a volume.
-func (p *FCProvisioner) volCreate(name string, pool string, config map[string]string, options controller.VolumeOptions) ( volid float64, err error) {
+func (p *FCProvisioner) volCreate(name string, pool string, config map[string]string, options controller.VolumeOptions) ( volid int64, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -272,14 +281,14 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 
 	//To Create volume provided by above parameters
 	provtype := config["provision_type"]
-	var volumeId float64
+	var volumeId int64
 	noOfVolumes, err := getNumberOfVolumes()
 	if err != nil {
 		glog.Errorf(fmt.Sprint(err))
 	}
 
 
-	limit, _ := strconv.ParseFloat(config["max_volume"], 64)
+	limit, _ := strconv.ParseInt(config["max_volume"],10, 64)
 
 	if noOfVolumes >= limit {
 		err =  errors.New("Limit exceeded for volume creation " + fmt.Sprint(noOfVolumes))
@@ -315,7 +324,7 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 	}
 	result := resultpostcreate.(map[string]interface{})
 
-	volumeId = result["id"].(float64)
+	volumeId = int64(result["id"].(float64))
 
 
 
@@ -323,7 +332,7 @@ func (p *FCProvisioner) volCreate(name string, pool string, config map[string]st
 }
 
 //Map recently created volume with all host mentioned in export list
-func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err error) {
+func mapVolumeToHost(arrayOfHosts []string, volumeId int64) (lunNo int32, err error) {
 
 	defer func() {
 		if res := recover(); res != nil && err == nil {
@@ -334,21 +343,21 @@ func mapVolumeToHost(arrayOfHosts []string, volumeId float64) (lunNo int32, err 
 	lunNo = -1
 	for _, hostName := range arrayOfHosts {
 		id, _ := getHostId(hostName)
-		lun, err := mapping(id, volumeId,float64(lunNo))
+		lun, err := mapping(id, volumeId,lunNo)
 		if err != nil {
 			return 0, err
 		}
-		if int32(lun) > -1 {
-			lunNo = int32(lun)
+		if lun > -1 {
+			lunNo = lun
 		}
 	}
 
 
-	return int32(lunNo) , nil
+	return lunNo , nil
 }
 
 //Maps the volume to the host passed by calling function
-func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err error) {
+func mapping(hostId int64, volumeId int64,lunNo int32) (lunno int32, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while mapping volume to host " + fmt.Sprint(res))
@@ -377,10 +386,10 @@ func mapping(hostId float64, volumeId float64,lunNo float64) (lunno float64, err
 	lunofVolume := resultPost.(map[string]interface{})
 
 
-	return lunofVolume["lun"].(float64), nil
+	return int32(lunofVolume["lun"].(float64)) , nil
 }
 
-func getHostId(name string) (id float64, err error) {
+func getHostId(name string) (id int64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("["+name+" ] error while getting host id " + fmt.Sprint(res))
@@ -397,10 +406,10 @@ func getHostId(name string) (id float64, err error) {
 	arrayOfResult := resultGet.([]interface{})
 	resultMap := arrayOfResult[0].(map[string]interface{})
 
-	return resultMap["id"].(float64), nil
+	return int64(resultMap["id"].(float64)), nil
 }
 
-func getNumberOfVolumes() (no float64, err error) {
+func getNumberOfVolumes() (no int64, err error) {
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while getting number of volumes " + fmt.Sprint(res))
@@ -443,7 +452,7 @@ func getNumberOfVolumes() (no float64, err error) {
 		err = errors.New("empty response while getting numberofvolumes ")
 		return no, err
 	}
-	return wholeMap["number_of_objects"].(float64), nil
+	return int64(wholeMap["number_of_objects"].(float64)), nil
 }
 
 
