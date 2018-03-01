@@ -91,7 +91,7 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 					if err != nil {
 						if strings.Contains(err.Error(), "MAPPING_ALREADY_EXISTS") {
 							//ignore this error
-							glog.Infoln("mapping alreaded exist for ",hostName)
+							glog.Infoln("mapping already exist for ",hostName)
 						} else {
 							glog.Error("error while mapping pv to host " + pv.Name + " to "+hostName+ " : " + err.Error())
 						}
