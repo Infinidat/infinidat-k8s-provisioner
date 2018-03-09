@@ -111,7 +111,7 @@ func AttachMetadata(resourceId int, options controller.VolumeOptions, kuberVersi
 			"host.k8s.pvcname ":   options.PVC.Name,
 			"host.k8s.pvcid ":     options.PVC.UID,
 			"host.k8s.pvname ":    options.PVName,
-			"host.created_by":  "K8S " + kuberVersion,
+			"host.created_by":  "K8S/" + kuberVersion,
 			}
 	//body for iscsi and fc types
 	if filesystemType != "" {
