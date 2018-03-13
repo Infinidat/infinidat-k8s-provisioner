@@ -5,7 +5,7 @@ ifeq ($(VERSION),)
         VERSION = latest
 endif
 IMAGE = $(REGISTRY):$(VERSION)
-MUTABLE_IMAGE = $(REGISTRY):latest
+MUTABLE_IMAGE = $(REGISTRY):$(shell date +%d%m%y)
 
 
 all build:
