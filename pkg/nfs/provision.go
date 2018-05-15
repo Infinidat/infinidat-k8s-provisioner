@@ -466,7 +466,7 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID int64, conf
 	for _, node := range nodelist {
 		for _, naddress := range node.Status.Addresses {
 			addr := net.ParseIP(naddress.Address)
-			if addr != nil {
+			if addr != nil  && naddress.Type=="InternalIP" {
 				permissionsput = append(permissionsput, map[string]interface{}{"access": acess, "no_root_squash": rootsq, "client": addr})
 
 			}
