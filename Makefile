@@ -2,7 +2,7 @@ ifeq ($(REGISTRY),)
         REGISTRY = infinidat/infinidat-k8s-provisioner
 endif
 ifeq ($(VERSION),)
-        VERSION = latest
+        VERSION = k8s-53
 endif
 IMAGE = $(REGISTRY):$(VERSION)
 MUTABLE_IMAGE = $(REGISTRY):$(shell date +%d%m%y)

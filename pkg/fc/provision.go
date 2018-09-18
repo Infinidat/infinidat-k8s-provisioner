@@ -53,7 +53,7 @@ func (p *FCProvisioner) getAccessModes() []v1.PersistentVolumeAccessMode {
 }
 
 //will map all pv's to nodes in cluster
-func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,deletedNodes ...*v1.Node) error {
+func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,nodeAddedFlag bool, nodeDeletedFlag bool ,deletedNodes ...*v1.Node) error {
 	hostList, err := commons.GetHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
 	if err != nil {
 		return err
@@ -94,11 +94,12 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 			}
 		}
 	}
+if nodeDeletedFlag {
 	for _, node := range deletedNodes {
 
 		hostID, err := getHostId(node.Name)
 		if err != nil {
-			glog.Error(node.Name + err.Error())
+			glog.Error(err.Error())
 		}
 
 		for _, pv := range pvList {
@@ -117,6 +118,7 @@ func (p *FCProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []
 		}
 
 	}
+ }
 	return nil
 }
 
@@ -405,6 +407,10 @@ func getHostId(name string) (id int64, err error) {
 	}
 
 	arrayOfResult := resultGet.([]interface{})
+	if len(arrayOfResult) == 0{
+		err = errors.New(" host id is not present ")
+		return id , err
+	}
 	resultMap := arrayOfResult[0].(map[string]interface{})
 
 	return int64(resultMap["id"].(float64)), nil
@@ -433,7 +439,6 @@ func getNumberOfVolumes() (no int64, err error) {
 	if response != nil {
 		responseInMap := response.(map[string]interface{})
 		if responseInMap != nil {
-
 			if str, iserr := commons.ParseError(responseInMap["error"]); iserr {
 				err = errors.New(str)
 				return no, err

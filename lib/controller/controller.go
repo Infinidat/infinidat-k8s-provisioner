@@ -22,7 +22,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 	"infinidat-k8s-provisioner/lib/leaderelection"
 	rl "infinidat-k8s-provisioner/lib/leaderelection/resourcelock"
 	"github.com/golang/glog"
@@ -483,17 +482,16 @@ func (ctrl *ProvisionController) SetFailedDeleteThreshold(threshold int) {
 	ctrl.failedDeleteThreshold = threshold
 	ctrl.failedDeleteStatsMutex.Unlock()
 }
-func (ctrl *ProvisionController) nodeAdded(obj interface{}) { 
-
+func (ctrl *ProvisionController) nodeAdded(obj interface{}) {
 	node, ok := obj.(*v1.Node)
 	if !ok {
 		return
 	}
-	glog.V(1).Info("Node added with addresses ", node.Status.Addresses)
+	glog.Info("Node added with addresses ", node.Status.Addresses)
 	//call all provisioner to update export
 	for pname, provisioner := range ctrl.proviserners {
 		if strings.Contains(pname, "/") { //so that default provisioner will get call only once
-			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList())
+			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList(),true,false,node)
 			if err != nil {
 				glog.Error("error while updating exports for: ", pname, " ", err)
 			}
@@ -506,10 +504,10 @@ func (ctrl *ProvisionController) nodeDeleted(obj interface{}) {
 		return
 	}
 	glog.V(1).Info("Node deleted with details ", node.Status.Addresses)
-	//call all provisioner to update export
+	 //call all provisioner to update export
 	for pname, provisioner := range ctrl.proviserners {
 		if strings.Contains(pname, "/") { //so that default provisioner will get call only once
-			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList(),node)
+			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList(),false, true ,node)
 			if err != nil {
 				glog.Error("error while updating exports for: ", pname, " ", err)
 			}
@@ -537,7 +535,7 @@ func (ctrl *ProvisionController) nodeUpdated(oldObj, newObj interface{}) {
 	//call all provisioner to update export
 	for pname, provisioner := range ctrl.proviserners {
 		if strings.Contains(pname, "/") { //so that default provisioner will get call only once
-			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList())
+			err := provisioner.UpdateMapping(ctrl.getPVList(), ctrl.getNodeList(),false,false,newnode)
 			if err != nil {
 				glog.Info("error updating exports for: ", pname, " ", err)
 			}
@@ -1234,6 +1232,7 @@ func (ctrl *ProvisionController) scheduleOperation(operationName string, operati
 		}
 	}
 }
+
 func (ctrl *ProvisionController) getNodeList() []*v1.Node {
 	var nodelist []*v1.Node
 	for _, o := range ctrl.nodes.List() {
@@ -1321,3 +1320,4 @@ func (ctrl *ProvisionController) fetchReclaimPolicy(storageClassName string) (v1
 
 	return v1.PersistentVolumeReclaimDelete, fmt.Errorf("Cannot convert object to StorageClass: %+v", classObj)
 }
+
