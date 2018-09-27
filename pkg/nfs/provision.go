@@ -468,7 +468,6 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID int64, conf
 			addr := net.ParseIP(naddress.Address)
 			if addr != nil  && naddress.Type=="InternalIP" {
 				permissionsput = append(permissionsput, map[string]interface{}{"access": acess, "no_root_squash": rootsq, "client": addr})
-
 			}
 		}
 	}
@@ -507,17 +506,17 @@ func (p *nfsProvisioner) createExport(directory string, FilesystemID int64, conf
 /**
 Export should be updated in case of node addition and deletion in k8s cluster
 */
-func (p *nfsProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,deletedNodes ...*v1.Node) (err error ){
+func (p *nfsProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node , nodeaddedflag bool , nodeDeletedFlag bool , addednode ...*v1.Node) (err error ){
 	defer func() {
 		if res := recover(); res != nil && err == nil {
 			err = errors.New("error while updating export " + fmt.Sprint(res))
 		}
 	}()
+	
 	//Check the list of pv whether empty or not
 	if len(pvList) == 0 {
 		return nil
 	}
-
 	//Check the length of the nodelist for empty or not
 	if len(nodeList) == 0 {
 		return nil
@@ -529,7 +528,7 @@ func (p *nfsProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList [
 		ours, _ := p.provisioned(pv)
 		if ours {
 			//If yes then get exportId of that PV
-			exportid := pv.Annotations[annExportID]
+			exportid := pv.Annotations[annExportID] 
 			if exportid != "" {
 				urlGet := "api/rest/exports/" + exportid
 				resp, err := commons.GetRestClient().R().
@@ -541,40 +540,95 @@ func (p *nfsProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList [
 
 				}
 
-				var permissionsput []map[string]interface{}
+				var permissionsput []interface{}
+				var permissions []interface{}
 				if resultpost != nil {
 					resultmap := resultpost.(map[string]interface{})
 					var acesstype string
 					var rootsquash bool
 					if resultmap["permissions"] != nil {
-						permissions := resultmap["permissions"].([]interface{})
+						permissions = resultmap["permissions"].([]interface{})
 						oldpermisiion := permissions[0].(map[string]interface{})
 						acesstype = fmt.Sprint(oldpermisiion["access"])
 						rootsquash, _ = strconv.ParseBool(fmt.Sprint(oldpermisiion["no_root_squash"]))
 					}
-					for _, node := range nodeList {
-						for _, naddress := range node.Status.Addresses {
-							addr := net.ParseIP(naddress.Address)
-							if addr != nil {
-								permissionsput = append(permissionsput, map[string]interface{}{"access": acesstype, "no_root_squash": rootsquash, "client": addr})
-
+					// if node addition activity happened then find it whether it is present already
+					if nodeaddedflag {
+						for _, node := range addednode {
+							for _, naddress := range node.Status.Addresses {
+								addr := net.ParseIP(naddress.Address)
+								if addr != nil {
+									_, ok := keyExists(permissions, fmt.Sprint(addr))
+									if ok {
+										glog.Info("node is already added into export permission hence skipping ", addr)
+										continue
+									}
+									permissions = append(permissions, map[string]interface{}{"access": acesstype, "no_root_squash": rootsquash, "client": addr})
+									err = callUpdateExportRules(permissions, pv.Name, urlGet)
+									if err != nil {
+										return err
+									}
+								}
 							}
 						}
+					}else{
+						for _, node := range nodeList {
+							for _, naddress := range node.Status.Addresses {
+								addr := net.ParseIP(naddress.Address)
+								if addr != nil  {
+									permissionsput = append(permissionsput, map[string]interface{}{"access": acesstype, "no_root_squash": rootsquash, "client": addr})
+								}
+							}
+					  	}
+						err  = callUpdateExportRules(permissionsput,pv.Name,urlGet)
+						if err != nil {
+							return err
+						}
 					}
-				}
-				respex, err := commons.GetRestClient().R().
-					SetBody(map[string]interface{}{
-						"permissions": permissionsput}).
-					Put(urlGet)
-
-				_, err = commons.CheckResponse(respex, err)
-				if err != nil {
-					return err
 
 				}
-				glog.Info("Modified export permissions for: ", pv.Name)
+
 			}
 		}
 	}
 	return nil
+}
+
+func callUpdateExportRules(permissions []interface{} , pvName string ,url string) error{
+	if permissions != nil {
+		respex, err := commons.GetRestClient().R().
+			SetBody(map[string]interface{}{
+			"permissions": permissions}).
+			Put(url)
+
+		_, err = commons.CheckResponse(respex, err)
+		if err != nil {
+			return err
+
+		}
+		glog.Info("Modified export permissions for: ", pvName)
+	}
+	return nil
+}
+
+
+func keyExists(decoded []interface{}, value string) (key string, ok bool) {
+	for i := range decoded {
+		_ , ok = keyExistsInMap(decoded[i].(map[string]interface{}),value)
+		if  ok {
+			return
+		}
+	}
+	return
+}
+
+func keyExistsInMap(decoded map[string]interface{}, value string) (key string, ok bool) {
+	for k, v := range decoded {
+		if v == value {
+			key = k
+			ok = true
+			return
+		}
+	}
+	return
 }

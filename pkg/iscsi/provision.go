@@ -56,7 +56,7 @@ func (p *iscsiProvisioner) getAccessModes() []v1.PersistentVolumeAccessMode {
 }
 
 //will map all pv's to nodes in cluster
-func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,deletedNodes ...*v1.Node) error {
+func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList []*v1.Node,nodeAddedFlag bool, nodeDeletedFlag bool ,deletedNodes ...*v1.Node) error {
 	hostList, err := commons.GetHostList(nodeList) //all nodes of cluster, registered on infinibox as host.
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 		}
 	}
 
-
+if nodeDeletedFlag {
 	for _, node := range deletedNodes {
 		hostID, err := getHostId(node.Name)
 		if err != nil {
@@ -120,7 +120,7 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 					}
 					err =commons.UnMap(hostID,volIDInint)
 					if err!=nil{
-						glog.Error("Error while unmapping pv from host" + pv.Name + " from "+node.Name+ " : " + err.Error())
+						glog.Error("Error while unmapping pv " + pv.Name + " from node  "+ node.Name + " : " + err.Error())
 					}
 				}
 
@@ -128,6 +128,7 @@ func (p *iscsiProvisioner) UpdateMapping(pvList []*v1.PersistentVolume, nodeList
 		}
 
 	}
+   }
 	return nil
 }
 
@@ -436,7 +437,7 @@ func getHostId(name string) (id int64, err error) {
 			err = errors.New("["+name+"] error while getting host id " + fmt.Sprint(res))
 		}
 	}()
-
+	
 	urlGetHostId := "api/rest/hosts"
 	resGet, err := commons.GetRestClient().R().SetQueryString("name=" + name).Get(urlGetHostId)
 	resultGet, err := commons.CheckResponse(resGet, err)
@@ -445,8 +446,12 @@ func getHostId(name string) (id int64, err error) {
 	}
 
 	arrayOfResult := resultGet.([]interface{})
+	if len(arrayOfResult) == 0 {
+		err = errors.New("host id not present ")
+		return id , err
+	}
 	resultMap := arrayOfResult[0].(map[string]interface{})
-
+	
 	return int64(resultMap["id"].(float64)), nil
 }
 
